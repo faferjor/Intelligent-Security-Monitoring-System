@@ -76,7 +76,7 @@ public:
 private:
     cv::dnn::Net net;
     std::vector<std::string> classes;
-    float confidenceThreshold = 0.25f;
+    float confidenceThreshold = 0.10f;  // 进一步降低到0.1，更容易检测到目标
     float nmsThreshold = 0.45f;
     int inputWidth = 640;
     int inputHeight = 640;

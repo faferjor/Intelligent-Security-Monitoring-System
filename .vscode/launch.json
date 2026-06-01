@@ -8,8 +8,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": true,
-      "cwd": "c:/Users/fafer/Desktop/protect/server",
-      "program": "c:/Users/fafer/Desktop/protect/server/build/Debug/outDebug",
+      "cwd": "c:/Users/fafer/Desktop/protect/client",
+      "program": "c:/Users/fafer/Desktop/protect/client/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [

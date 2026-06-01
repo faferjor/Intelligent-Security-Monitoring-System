@@ -58,6 +58,10 @@ std::vector<DetectionResult> DetectorModel::detect(const cv::Mat& frame)
         std::vector<cv::Mat> outputs;
         net.forward(outputs, net.getUnconnectedOutLayersNames());
 
+        if (outputs.empty()) {
+            return results;
+        }
+
         std::vector<int> classIds;
         std::vector<float> confidences;
         std::vector<cv::Rect> boxes;
@@ -65,44 +69,42 @@ std::vector<DetectionResult> DetectorModel::detect(const cv::Mat& frame)
         float xFactor = frame.cols / static_cast<float>(inputWidth);
         float yFactor = frame.rows / static_cast<float>(inputHeight);
 
-        float* data = reinterpret_cast<float*>(outputs[0].data);
-        const int rows = 8400;
-        const int dimensions = 85;
+        const float* data = reinterpret_cast<float*>(outputs[0].data);
+        const int numDetections = outputs[0].size[2];
+        const int numClasses = outputs[0].size[1] - 4;
 
-        for (int i = 0; i < rows; ++i) {
-            float confidence = data[4];
-            if (confidence >= confidenceThreshold) {
-                float* classesScores = data + 5;
-                cv::Mat scores(1, classes.size(), CV_32FC1, classesScores);
-                cv::Point classIdPoint;
-                double maxClassScore;
-                cv::minMaxLoc(scores, 0, &maxClassScore, 0, &classIdPoint);
-
-                if (maxClassScore > confidenceThreshold) {
-                    confidences.push_back(confidence);
-                    classIds.push_back(classIdPoint.x);
-
-                    float x = data[0];
-                    float y = data[1];
-                    float w = data[2];
-                    float h = data[3];
-
-                    int left = static_cast<int>((x - 0.5 * w) * xFactor);
-                    int top = static_cast<int>((y - 0.5 * h) * yFactor);
-                    int width = static_cast<int>(w * xFactor);
-                    int height = static_cast<int>(h * yFactor);
-
-                    boxes.push_back(cv::Rect(left, top, width, height));
+        for (int i = 0; i < numDetections; ++i) {
+            float maxConf = 0;
+            int classId = -1;
+            for (int j = 0; j < numClasses; ++j) {
+                float conf = data[(4 + j) * numDetections + i];
+                if (conf > maxConf) {
+                    maxConf = conf;
+                    classId = j;
                 }
             }
-            data += dimensions;
+
+            if (maxConf > confidenceThreshold) {
+                float cx = data[i];
+                float cy = data[numDetections + i];
+                float w = data[2 * numDetections + i];
+                float h = data[3 * numDetections + i];
+
+                int left = static_cast<int>((cx - w / 2) * xFactor);
+                int top = static_cast<int>((cy - h / 2) * yFactor);
+                int width = static_cast<int>(w * xFactor);
+                int height = static_cast<int>(h * yFactor);
+
+                classIds.push_back(classId);
+                confidences.push_back(maxConf);
+                boxes.push_back(cv::Rect(left, top, width, height));
+            }
         }
 
         std::vector<int> indices;
         cv::dnn::NMSBoxes(boxes, confidences, confidenceThreshold, nmsThreshold, indices);
 
-        for (int i = 0; i < indices.size(); ++i) {
-            int idx = indices[i];
+        for (int idx : indices) {
             DetectionResult result;
             result.classId = classIds[idx];
             result.className = (result.classId < classes.size()) ? classes[result.classId] : "Unknown";

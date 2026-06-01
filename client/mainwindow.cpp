@@ -48,30 +48,8 @@ MainWindow::MainWindow(QWidget *parent)
     setupUI();
 
     tcpClient = new TcpClient(this);
-    detector = new DetectorModel(this);
     cameraThread = new CameraThread(this);
     cameraTimer = new QTimer(this);
-
-    // 获取应用程序运行目录
-    QString modelPath =  "C:/Users/fafer/Desktop/protect/client/build/Desktop_Qt_6_5_3_MinGW_64_bit-Debug/debug/yolov8n.onnx";
-    QString classesPath =  "C:/Users/fafer/Desktop/protect/client/build/Desktop_Qt_6_5_3_MinGW_64_bit-Debug/debug/coco.names";
-    qDebug() << "Model Path:" << modelPath;
-    qDebug() << "Classes Path:" << classesPath;
-
-    // 尝试从运行目录加载
-    bool modelLoaded = detector->loadModel(modelPath.toStdString(), classesPath.toStdString());
-    if (!modelLoaded) {
-        QString errorMsg = QString("Failed to load YOLOv8 model!\n\n" 
-                                 "Please ensure the following files exist:\n"
-                                 "1. %1\n"
-                                 "2. %2\n\n"
-                                 "You can download them from:\n"
-                                 "- YOLOv8n ONNX: https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.onnx\n"
-                                 "- coco.names: https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names")
-                                 .arg(modelPath, classesPath);
-        
-        QMessageBox::warning(this, "Error", errorMsg);
-    }
 
     connect(tcpClient, &TcpClient::connected, this, &MainWindow::onServerConnected);
     connect(tcpClient, &TcpClient::disconnected, this, &MainWindow::onServerDisconnected);
@@ -224,7 +202,8 @@ void MainWindow::onStopCameraClicked()
 void MainWindow::onCaptureClicked()
 {
     if (isCameraRunning && !latestFrame.empty()) {
-        QImage qImage = detector->matToQImage(latestFrame);
+        // 直接转换cv::Mat到QImage
+        QImage qImage = QImage(latestFrame.data, latestFrame.cols, latestFrame.rows, static_cast<int>(latestFrame.step), QImage::Format_RGB888).rgbSwapped();
         if (saveCapture(qImage)) {
             updateLog("Image captured successfully");
         } else {
@@ -238,7 +217,8 @@ void MainWindow::onCaptureClicked()
 void MainWindow::onSendFrameClicked()
 {
     if (tcpClient->isConnected() && isCameraRunning && !latestFrame.empty()) {
-        QImage qImage = detector->matToQImage(latestFrame);
+        // 直接转换cv::Mat到QImage
+        QImage qImage = QImage(latestFrame.data, latestFrame.cols, latestFrame.rows, static_cast<int>(latestFrame.step), QImage::Format_RGB888).rgbSwapped();
         tcpClient->sendFrame(qImage);
         updateLog("Frame sent to server");
     } else if (!tcpClient->isConnected()) {
@@ -287,12 +267,16 @@ void MainWindow::updateCameraFrame(const cv::Mat& frame)
 {
     if (!frame.empty()) {
         latestFrame = frame.clone();  // 保存最新帧用于抓拍
-        QImage qImage = detector->matToQImage(frame);
+        
+        // 转换为QImage显示
+        QImage qImage = QImage(frame.data, frame.cols, frame.rows, static_cast<int>(frame.step), QImage::Format_RGB888).rgbSwapped();
+        
+        // 显示本地画面（原始画面，不检测）
         localVideoLabel->setPixmap(QPixmap::fromImage(qImage).scaled(localVideoLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
-
+        
+        // 如果连接到服务器，发送画面到服务器进行检测
         if (tcpClient->isConnected()) {
-            std::vector<DetectionResult> results = detector->detect(frame);
-            tcpClient->sendDetectionResults(results);
+            tcpClient->sendFrame(qImage);
         }
     }
 }
@@ -305,7 +289,14 @@ void MainWindow::updateLog(const QString& message)
 
 void MainWindow::drawResultsOnFrame(QImage& frame, const std::vector<DetectionResult>& results)
 {
-    cv::Mat mat = detector->qImageToMat(frame);
+    // 将QImage转换为cv::Mat
+    cv::Mat mat;
+    if (frame.format() == QImage::Format_RGB888) {
+        mat = cv::Mat(frame.height(), frame.width(), CV_8UC3, const_cast<uchar*>(frame.bits()), frame.bytesPerLine()).clone();
+        cv::cvtColor(mat, mat, cv::COLOR_RGB2BGR);
+    } else {
+        return;
+    }
     
     for (const auto& result : results) {
         cv::rectangle(mat, result.bbox, cv::Scalar(0, 255, 0), 2);
@@ -324,7 +315,9 @@ void MainWindow::drawResultsOnFrame(QImage& frame, const std::vector<DetectionRe
                     cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1);
     }
     
-    frame = detector->matToQImage(mat);
+    // 将cv::Mat转换回QImage
+    cv::cvtColor(mat, mat, cv::COLOR_BGR2RGB);
+    frame = QImage(mat.data, mat.cols, mat.rows, static_cast<int>(mat.step), QImage::Format_RGB888).copy();
 }
 
 bool MainWindow::saveCapture(const QImage& frame)

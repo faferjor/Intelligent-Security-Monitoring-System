@@ -65,7 +65,6 @@ private slots:
 private:
     Ui::MainWindow *ui;
     TcpClient* tcpClient;
-    DetectorModel* detector;
     CameraThread* cameraThread;
     QTimer* cameraTimer;
     cv::VideoCapture cap;

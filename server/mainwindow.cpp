@@ -54,24 +54,15 @@ MainWindow::MainWindow(QWidget *parent)
     cameraTimer = new QTimer(this);
 
     // 获取应用程序运行目录
-    QString modelPath =  "C:/Users/fafer/Desktop/protect/server/build/Desktop_Qt_6_5_3_MinGW_64_bit-Debug/debug/yolov8n.onnx";
-    QString classesPath =   "C:/Users/fafer/Desktop/protect/server/build/Desktop_Qt_6_5_3_MinGW_64_bit-Debug/debug/coco.names";
+    QString appDir = "C:/Users/fafer/Desktop/Intelligent-Security-Monitoring-System/server/build/Desktop_Qt_6_5_3_MinGW_64_bit-Debug";
+    QString modelPath = appDir + "/yolov8n.onnx";
+    QString classesPath = appDir + "/coco.names";
+    qDebug() << "Application directory:" << appDir;
     qDebug() << "Model Path:" << modelPath;
     qDebug() << "Classes Path:" << classesPath;
 
     // 尝试从运行目录加载
     bool modelLoaded = detector->loadModel(modelPath.toStdString(), classesPath.toStdString());
-    
-    // 如果失败，尝试从项目根目录加载
-    if (!modelLoaded) {
-        qDebug() << "Trying to load from project root directory...";
-        modelPath = "C:/Users/fafer/Desktop/protect/server/build/Desktop_Qt_6_5_3_MinGW_64_bit-Debug/debug/yolov8n.onnx";
-        classesPath =  "C:/Users/fafer/Desktop/protect/server/build/Desktop_Qt_6_5_3_MinGW_64_bit-Debug/debug/coco.names";
-        qDebug() << "Model Path:" << modelPath;
-        qDebug() << "Classes Path:" << classesPath;
-        
-        modelLoaded = detector->loadModel(modelPath.toStdString(), classesPath.toStdString());
-    }
 
     if (!modelLoaded) {
         QString errorMsg = QString("Failed to load YOLOv8 model!\n\n" 
@@ -95,7 +86,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(tcpServer, &TcpServer::messageReceived, this, &MainWindow::onMessageReceived);
     connect(tcpServer, &TcpServer::frameReceived, this, &MainWindow::onFrameReceived);
 
-    updateLog("Smart Security Server initialized");
+    updateLog("Smart Security Server initialized. Full screen detection enabled by default.");
 }
 
 MainWindow::~MainWindow()
@@ -154,9 +145,32 @@ void MainWindow::setupUI()
     cameraLayout->addWidget(clearZonesBtn);
 
     QSplitter* splitter = new QSplitter(Qt::Horizontal, this);
-    QLabel* videoLabel = new QLabel(this);
-    videoLabel->setAlignment(Qt::AlignCenter);
-    videoLabel->setStyleSheet("background-color: black;");
+    
+    // 视频显示区域 - 网格布局，支持多个客户端
+    videoWidget = new QWidget(this);
+    videoLayout = new QGridLayout(videoWidget);
+    videoLayout->setSpacing(5);
+    
+    // 添加服务器本地摄像头的标签
+    QLabel* localLabel = new QLabel(this);
+    localLabel->setAlignment(Qt::AlignCenter);
+    localLabel->setStyleSheet("background-color: black; border: 2px solid #333;");
+    localLabel->setText("Local Camera");
+    localLabel->setMinimumSize(320, 240); // 设置最小尺寸
+    localLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    videoLayout->addWidget(localLabel, 0, 0);
+    this->videoLabel = localLabel;
+    
+    // 准备可用的标签列表
+    for (int i = 0; i < 8; ++i) { // 最多支持8个客户端
+        QLabel* label = new QLabel(this);
+        label->setAlignment(Qt::AlignCenter);
+        label->setStyleSheet("background-color: black; border: 2px solid #333;");
+        label->setMinimumSize(320, 240); // 设置最小尺寸
+        label->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        label->hide();
+        availableLabels.append(label);
+    }
 
     QWidget* rightPanel = new QWidget(this);
     QVBoxLayout* rightLayout = new QVBoxLayout(rightPanel);
@@ -197,7 +211,7 @@ void MainWindow::setupUI()
     rightLayout->addWidget(new QLabel("Server Log:"));
     rightLayout->addWidget(logTextEdit);
 
-    splitter->addWidget(videoLabel);
+    splitter->addWidget(videoWidget);
     splitter->addWidget(rightPanel);
     splitter->setStretchFactor(0, 3);
     splitter->setStretchFactor(1, 1);
@@ -325,12 +339,53 @@ void MainWindow::onClientConnected(const QString& clientId)
 {
     updateClientList();
     updateLog(QString("Client connected: %1").arg(clientId));
+    
+    // 为新客户端分配显示标签
+    if (!availableLabels.isEmpty()) {
+        QLabel* label = availableLabels.takeFirst();
+        
+        // 计算网格位置
+        int clientCount = clientDataMap.size();
+        int row = (clientCount + 1) / 2;  // 从第1行开始，第0行是本地摄像头
+        int col = (clientCount + 1) % 2;
+        
+        // 如果row >= 1，因为第0行已经是本地摄像头了
+        videoLayout->addWidget(label, row, col);
+        label->show();
+        label->setText(QString("Client %1").arg(clientId.left(4)));
+        
+        // 保存客户端数据
+        ClientData data;
+        data.displayLabel = label;
+        clientDataMap[clientId] = data;
+    }
 }
 
 void MainWindow::onClientDisconnected(const QString& clientId)
 {
     updateClientList();
     updateLog(QString("Client disconnected: %1").arg(clientId));
+    
+    // 释放客户端的显示标签
+    if (clientDataMap.contains(clientId)) {
+        ClientData data = clientDataMap.take(clientId);
+        if (data.displayLabel) {
+            videoLayout->removeWidget(data.displayLabel);
+            data.displayLabel->clear();
+            data.displayLabel->hide();
+            availableLabels.append(data.displayLabel);
+        }
+    }
+    
+    // 重新排列剩余的客户端标签
+    int index = 0;
+    for (auto it = clientDataMap.begin(); it != clientDataMap.end(); ++it) {
+        int row = (index + 1) / 2;
+        int col = (index + 1) % 2;
+        videoLayout->removeWidget(it.value().displayLabel);
+        videoLayout->addWidget(it.value().displayLabel, row, col);
+        index++;
+    }
 }
 
 void MainWindow::onMessageReceived(const QString& clientId, const QString& message)
@@ -344,17 +399,114 @@ void MainWindow::onFrameReceived(const QString& clientId, const QImage& frame)
     if (frame.isNull()) {
         return;
     }
-
-    cv::Mat matFrame = detector->qImageToMat(frame);
+    
+    if (!clientDataMap.contains(clientId)) {
+        return;
+    }
+    
+    // 保存客户端的帧
+    clientDataMap[clientId].lastFrame = frame;
+    
+    // 转换为OpenCV格式进行检测
+    cv::Mat matFrame;
+    if (frame.format() == QImage::Format_RGB888) {
+        matFrame = cv::Mat(frame.height(), frame.width(), CV_8UC3, const_cast<uchar*>(frame.bits()), frame.bytesPerLine()).clone();
+        cv::cvtColor(matFrame, matFrame, cv::COLOR_RGB2BGR);
+    } else {
+        // 转换为RGB888
+        QImage rgbFrame = frame.convertToFormat(QImage::Format_RGB888);
+        matFrame = cv::Mat(rgbFrame.height(), rgbFrame.width(), CV_8UC3, const_cast<uchar*>(rgbFrame.bits()), rgbFrame.bytesPerLine()).clone();
+        cv::cvtColor(matFrame, matFrame, cv::COLOR_RGB2BGR);
+    }
+    
     if (matFrame.empty()) {
         return;
     }
-
-    // 检查线程是否已完成（可以重新启动）
-    if (detectionThread->isFinished()) {
-        detectionThread->setFrame(matFrame);
-        detectionThread->start();
+    
+    // 执行运动检测
+    std::vector<MotionBlob> motionBlobs = detector->detectMotion(matFrame);
+    if (isMotionDetectionEnabled && !motionBlobs.empty()) {
+        drawMotionBlobsOnFrame(matFrame, motionBlobs);
+        for (const auto& blob : motionBlobs) {
+            updateLog(QString("MOTION DETECTED from %1: Object %2 at (%3, %4)").arg(clientId.left(4)).arg(blob.id).arg(blob.center.x).arg(blob.center.y));
+        }
     }
+    
+    // 对客户端的画面进行检测（只在启用区域检测时）
+    std::vector<DetectionResult> results;
+    if (isZoneDetectionEnabled) {
+        results = detector->detect(matFrame);
+    }
+    
+    // 保存检测结果
+    clientDataMap[clientId].lastResults = results;
+    
+    // 区域入侵检测和绘制检测结果（只在启用区域检测时）
+    if (isZoneDetectionEnabled) {
+        std::vector<ZoneAlert> zoneAlerts;
+        
+        // 检查是否有警戒区域
+        if (detector->getGuardZones().empty()) {
+            // 没有警戒区域，全屏检测
+            for (const auto& result : results) {
+                ZoneAlert alert;
+                alert.zoneId = 0;
+                alert.zoneName = "Full Screen";
+                alert.intrusionPoint = result.center;
+                alert.objectType = result.className;
+                alert.confidence = result.confidence;
+                zoneAlerts.push_back(alert);
+            }
+        } else {
+            // 有警戒区域，只检测区域内的目标
+            zoneAlerts = detector->detectZoneIntrusion(matFrame, results);
+        }
+        
+        for (const auto& alert : zoneAlerts) {
+            updateLog(QString("ZONE ALERT from %1: %2 detected in zone '%3' at (%4, %5)").arg(
+                clientId.left(4),
+                QString::fromStdString(alert.objectType),
+                QString::fromStdString(alert.zoneName),
+                QString::number(alert.intrusionPoint.x),
+                QString::number(alert.intrusionPoint.y)));
+        }
+        
+        // 记录检测到的关键目标
+        for (const auto& result : results) {
+            if (result.className == "person" || result.className == "car" || result.className == "truck" || 
+                result.className == "fire" || result.className == "smoke") {
+                QString logMsg = QString("ALERT from %1: %2 detected at (%3, %4) with confidence %5")
+                    .arg(clientId.left(4))
+                    .arg(QString::fromStdString(result.className))
+                    .arg(QString::number(result.center.x))
+                    .arg(QString::number(result.center.y))
+                    .arg(result.confidence, 0, 'f', 2);
+                updateLog(logMsg);
+            }
+        }
+    }
+    
+    // 绘制警戒区域
+    drawGuardZonesOnFrame(matFrame);
+    
+    // 绘制检测结果在画面上（只在启用区域检测时）
+    cv::Mat displayFrame = matFrame.clone();
+    if (isZoneDetectionEnabled) {
+        drawResultsOnFrame(displayFrame, results);
+    }
+    
+    // 转换回QImage
+    cv::cvtColor(displayFrame, displayFrame, cv::COLOR_BGR2RGB);
+    QImage qImage(displayFrame.data, displayFrame.cols, displayFrame.rows, static_cast<int>(displayFrame.step), QImage::Format_RGB888);
+    QImage displayImage = qImage.copy();
+    
+    // 显示在客户端对应的标签上
+    QLabel* clientLabel = clientDataMap[clientId].displayLabel;
+    QSize clientLabelSize = clientLabel->size();
+    clientLabel->setPixmap(QPixmap::fromImage(displayImage).scaled(clientLabelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    
+    // 将检测结果发送回客户端
+    sendFrameWithResultsToClient(clientId, displayImage, results);
 }
 
 void MainWindow::updateCameraFrame()
@@ -382,17 +534,37 @@ void MainWindow::updateCameraFrame()
         }
     }
 
+    // 每3帧执行一次目标检测（只在启用区域检测时进行）
+    frameCounter++;
+    if (isZoneDetectionEnabled && frameCounter % DETECTION_INTERVAL == 0) {
+        // 直接在主线程检测，确保能正常工作
+        std::vector<DetectionResult> results = detector->detect(frame);
+        qDebug() << "Direct detection, results:" << results.size();
+        onDetectionCompleted(results, frame);
+    } else if (!isZoneDetectionEnabled) {
+        // 如果未启用区域检测，清空之前的检测结果
+        lastResults.clear();
+    }
+
     // 绘制警戒区域
     drawGuardZonesOnFrame(frame);
 
-    // 直接显示当前帧
-    QImage qImage = detector->matToQImage(frame);
-    videoLabel->setPixmap(QPixmap::fromImage(qImage).scaled(videoLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    // 将检测结果绘制在当前帧上（只在启用区域检测时）
+    cv::Mat displayFrame = frame.clone();
+    if (isZoneDetectionEnabled) {
+        drawResultsOnFrame(displayFrame, lastResults);
+    }
 
-    // 执行目标检测（异步）
-    if (detectionThread->isFinished()) {
-        detectionThread->setFrame(frame.clone());
-        detectionThread->start();
+    // 显示当前帧
+    QImage qImage = detector->matToQImage(displayFrame);
+    QPixmap pixmap = QPixmap::fromImage(qImage);
+    QSize labelSize = videoLabel->size();
+    // 确保缩放到标签的尺寸，不改变标签本身的大小
+    videoLabel->setPixmap(pixmap.scaled(labelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+
+    // 发送帧到所有连接的客户端（只在启用区域检测时才发送检测结果）
+    if (isZoneDetectionEnabled && !lastResults.empty() && tcpServer->getConnectedClients().size() > 0) {
+        tcpServer->sendFrameToAllClients(qImage, lastResults);
     }
 }
 
@@ -402,19 +574,58 @@ void MainWindow::onDetectionCompleted(const std::vector<DetectionResult>& result
         return;
     }
 
-    // 只有当检测到目标时才更新显示，避免覆盖实时画面
-    if (!results.empty()) {
-        cv::Mat displayFrame = frame.clone();
-        
-        // 绘制警戒区域
-        drawGuardZonesOnFrame(displayFrame);
-        
-        // 绘制检测结果
-        drawResultsOnFrame(displayFrame, results);
-        
+    // 更新检测结果
+    lastResults = results;
+
+    // 只在启用区域检测时才处理检测结果
+    if (isZoneDetectionEnabled) {
+        // 调试信息：输出检测到的目标数量
+        if (results.empty()) {
+            qDebug() << "No objects detected";
+        } else {
+            qDebug() << "Detected" << results.size() << "objects:";
+            for (const auto& result : results) {
+                qDebug() << "  -" << QString::fromStdString(result.className) 
+                         << "confidence:" << result.confidence 
+                         << "at:" << result.center.x << result.center.y;
+            }
+        }
+
+        // 显示检测结果的详细信息
+        if (!results.empty()) {
+            for (const auto& result : results) {
+                updateLog(QString("DETECTED: %1 at (%2, %3), confidence: %4")
+                    .arg(QString::fromStdString(result.className))
+                    .arg(result.center.x)
+                    .arg(result.center.y)
+                    .arg(result.confidence, 0, 'f', 2));
+            }
+        }
+
         // 区域入侵检测
-        if (isZoneDetectionEnabled) {
-            std::vector<ZoneAlert> zoneAlerts = detector->detectZoneIntrusion(displayFrame, results);
+        std::vector<ZoneAlert> zoneAlerts;
+        
+        // 检查是否有警戒区域
+        if (detector->getGuardZones().empty()) {
+            // 没有警戒区域，全屏检测
+            qDebug() << "No guard zones, full screen detection enabled";
+            for (const auto& result : results) {
+                ZoneAlert alert;
+                alert.zoneId = 0;
+                alert.zoneName = "Full Screen";
+                alert.intrusionPoint = result.center;
+                alert.objectType = result.className;
+                alert.confidence = result.confidence;
+                zoneAlerts.push_back(alert);
+            }
+        } else {
+            // 有警戒区域，只检测区域内的目标
+            zoneAlerts = detector->detectZoneIntrusion(frame, results);
+        }
+        
+        if (zoneAlerts.empty()) {
+            qDebug() << "No zone intrusion detected";
+        } else {
             for (const auto& alert : zoneAlerts) {
                 updateLog(QString("ZONE ALERT: %1 detected in zone '%2' at (%3, %4)").arg(
                     QString::fromStdString(alert.objectType),
@@ -424,15 +635,16 @@ void MainWindow::onDetectionCompleted(const std::vector<DetectionResult>& result
             }
         }
 
-        QImage qImage = detector->matToQImage(displayFrame);
-        videoLabel->setPixmap(QPixmap::fromImage(qImage).scaled(videoLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
-
-        tcpServer->sendFrameToAllClients(qImage, results);
-    }
-
-    for (const auto& result : results) {
-        if (result.className == "person" || result.className == "car" || result.className == "truck") {
-            updateLog(QString("ALERT: %1 detected at (%2, %3)").arg(QString::fromStdString(result.className), QString::number(result.center.x), QString::number(result.center.y)));
+        for (const auto& result : results) {
+            if (result.className == "person" || result.className == "car" || result.className == "truck" || 
+                result.className == "fire" || result.className == "smoke") {
+                QString logMsg = QString("ALERT: %1 detected at (%2, %3) with confidence %4")
+                .arg(QString::fromStdString(result.className))
+                    .arg(QString::number(result.center.x))
+                    .arg(QString::number(result.center.y))
+                    .arg(result.confidence, 0, 'f', 2); // 0=最小宽度，'f'浮点格式，2位小数
+                updateLog(logMsg);
+            }
         }
     }
 }
@@ -645,4 +857,9 @@ void MainWindow::deleteSelectedHistoryItem()
     } else {
         updateLog(QString("Failed to delete: %1").arg(QFileInfo(filePath).fileName()));
     }
+}
+
+void MainWindow::sendFrameWithResultsToClient(const QString& clientId, const QImage& frame, const std::vector<DetectionResult>& results)
+{
+    tcpServer->sendFrameToClient(clientId, frame, results);
 }

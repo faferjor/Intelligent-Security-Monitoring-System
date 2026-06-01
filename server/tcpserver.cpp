@@ -149,6 +149,18 @@ void TcpServer::sendFrameToAllClients(const QImage& frame, const std::vector<Det
     }
 }
 
+void TcpServer::sendFrameToClient(const QString& clientId, const QImage& frame, const std::vector<DetectionResult>& results)
+{
+    QByteArray data = serializeFrame(frame, results);
+    for (const auto& client : clients) {
+        if (client.clientId == clientId && client.socket->state() == QAbstractSocket::ConnectedState) {
+            client.socket->write(data);
+            client.socket->flush();
+            break;
+        }
+    }
+}
+
 void TcpServer::sendMessageToClient(const QString& clientId, const QString& message)
 {
     QByteArray data = "MSG:" + message.toUtf8();

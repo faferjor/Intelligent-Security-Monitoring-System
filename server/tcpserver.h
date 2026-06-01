@@ -28,6 +28,7 @@ public:
     bool startServer(quint16 port);
     void stopServer();
     void sendFrameToAllClients(const QImage& frame, const std::vector<DetectionResult>& results);
+    void sendFrameToClient(const QString& clientId, const QImage& frame, const std::vector<DetectionResult>& results);
     void sendMessageToClient(const QString& clientId, const QString& message);
     void sendMessageToAllClients(const QString& message);
 

@@ -71,6 +71,7 @@ private slots:
     void updateCameraFrame();
     void onDetectionCompleted(const std::vector<DetectionResult>& results, const cv::Mat& frame);
     void updateLog(const QString& message);
+    void sendFrameWithResultsToClient(const QString& clientId, const QImage& frame, const std::vector<DetectionResult>& results);
 
 private:
     Ui::MainWindow *ui;
@@ -84,6 +85,22 @@ private:
     QDateTime startTime;
     bool isMotionDetectionEnabled = false;
     bool isZoneDetectionEnabled = false;
+    std::vector<DetectionResult> lastResults;  // 保存本地摄像头的检测结果
+    int frameCounter = 0;  // 帧计数器
+    static const int DETECTION_INTERVAL = 3;  // 每3帧检测一次
+    
+    // 存储每个客户端的数据
+    struct ClientData {
+        QImage lastFrame;
+        std::vector<DetectionResult> lastResults;
+        QLabel* displayLabel;
+    };
+    QMap<QString, ClientData> clientDataMap;
+    
+    // 布局相关
+    QWidget* videoWidget;
+    QGridLayout* videoLayout;
+    QList<QLabel*> availableLabels;
     
     // UI Widgets
     QLabel* videoLabel;
