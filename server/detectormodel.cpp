@@ -390,3 +390,244 @@ bool DetectorModel::isPointInPolygon(const cv::Point& point, const std::vector<c
     return inside;
 }
 
+// ==========================================
+// 越线检测实现
+// ==========================================
+
+bool operator==(const TrackedObject& a, const TrackedObject& b)
+{
+    return a.objectId == b.objectId;
+}
+
+void DetectorModel::addTripWire(const TripWire& wire)
+{
+    TripWire newWire = wire;
+    if (newWire.id == 0) {
+        newWire.id = nextWireId++;
+    }
+    tripWires.push_back(newWire);
+}
+
+void DetectorModel::removeTripWire(int wireId)
+{
+    auto it = std::remove_if(tripWires.begin(), tripWires.end(),
+        [wireId](const TripWire& w) { return w.id == wireId; });
+    tripWires.erase(it, tripWires.end());
+}
+
+void DetectorModel::clearTripWires()
+{
+    tripWires.clear();
+    nextWireId = 1;
+}
+
+std::vector<TripWireAlert> DetectorModel::detectTripWireCrossing(const cv::Mat& frame, const std::vector<DetectionResult>& results)
+{
+    std::vector<TripWireAlert> alerts;
+
+    if (!tripWireDetectionEnabled || tripWires.empty() || results.empty()) {
+        return alerts;
+    }
+
+    currentFrameCount++;
+
+    // 更新跟踪目标
+    updateTrackedObjects(results);
+
+    try {
+        for (const auto& wire : tripWires) {
+            if (!wire.isEnabled) {
+                continue;
+            }
+
+            for (const auto& trackedObj : trackedObjects) {
+                if (trackedObj.positionHistory.size() < 2) {
+                    continue;
+                }
+
+                cv::Point prevPoint = trackedObj.positionHistory[trackedObj.positionHistory.size() - 2];
+                cv::Point currPoint = trackedObj.positionHistory[trackedObj.positionHistory.size() - 1];
+
+                TripWire::Direction crossingDirection;
+                if (hasCrossedLine(prevPoint, currPoint, wire.p1, wire.p2, crossingDirection)) {
+                    if (isDirectionMatching(wire.direction, crossingDirection)) {
+                        TripWireAlert alert;
+                        alert.wireId = wire.id;
+                        alert.wireName = wire.name;
+                        alert.crossingPoint = currPoint;
+                        alert.objectType = trackedObj.className;
+                        alert.confidence = 1.0f;
+                        alert.crossingDirection = crossingDirection;
+                        alerts.push_back(alert);
+                    }
+                }
+            }
+        }
+    } catch (const std::exception& e) {
+        qDebug() << "Trip wire detection error:" << e.what();
+    }
+
+    return alerts;
+}
+
+void DetectorModel::updateTrackedObjects(const std::vector<DetectionResult>& results)
+{
+    // 标记所有现有对象为过期
+    for (auto& obj : trackedObjects) {
+        obj.lastSeenFrame = currentFrameCount - 1;
+    }
+
+    for (const auto& result : results) {
+        bool matched = false;
+
+        // 尝试与现有跟踪对象匹配
+        for (auto& obj : trackedObjects) {
+            double iou = calculateIoU(obj.currentBbox, result.bbox);
+            if (iou > 0.5 && obj.className == result.className) {
+                // 更新现有对象
+                obj.currentBbox = result.bbox;
+                obj.positionHistory.push_back(result.center);
+                // 保留最近30帧的历史
+                if (obj.positionHistory.size() > 30) {
+                    obj.positionHistory.erase(obj.positionHistory.begin());
+                }
+                obj.lastSeenFrame = currentFrameCount;
+                matched = true;
+                break;
+            }
+        }
+
+        // 如果没有匹配，创建新对象
+        if (!matched) {
+            TrackedObject newObj;
+            newObj.objectId = nextTrackedObjectId++;
+            newObj.className = result.className;
+            newObj.currentBbox = result.bbox;
+            newObj.positionHistory.push_back(result.center);
+            newObj.lastSeenFrame = currentFrameCount;
+            trackedObjects.push_back(newObj);
+        }
+    }
+
+    // 清理长时间未出现的对象（超过60帧）
+    trackedObjects.erase(std::remove_if(trackedObjects.begin(), trackedObjects.end(),
+        [this](const TrackedObject& o) { return (currentFrameCount - o.lastSeenFrame) > 60; }),
+        trackedObjects.end());
+}
+
+double DetectorModel::pointToLineDistance(const cv::Point& point, const cv::Point& lineP1, const cv::Point& lineP2)
+{
+    double numerator = std::abs((lineP2.y - lineP1.y) * point.x - (lineP2.x - lineP1.x) * point.y + 
+                                 lineP2.x * lineP1.y - lineP2.y * lineP1.x);
+    double denominator = std::sqrt(std::pow(lineP2.y - lineP1.y, 2) + std::pow(lineP2.x - lineP1.x, 2));
+    return denominator > 0 ? numerator / denominator : 0;
+}
+
+bool DetectorModel::hasCrossedLine(const cv::Point& prevPoint, const cv::Point& currPoint,
+                                   const cv::Point& lineP1, const cv::Point& lineP2,
+                                   TripWire::Direction& crossingDirection)
+{
+    // 计算两点相对于线的位置
+    auto orientation = [](const cv::Point& p, const cv::Point& l1, const cv::Point& l2) {
+        return (l2.x - l1.x) * (p.y - l1.y) - (l2.y - l1.y) * (p.x - l1.x);
+    };
+
+    int prevOrient = orientation(prevPoint, lineP1, lineP2);
+    int currOrient = orientation(currPoint, lineP1, lineP2);
+
+    // 如果方向相反，说明穿越了线
+    if (prevOrient * currOrient < 0) {
+        // 确定穿越方向
+        if (std::abs(lineP2.x - lineP1.x) > std::abs(lineP2.y - lineP1.y)) {
+            // 水平线为主，判断左右
+            if (currPoint.x > prevPoint.x) {
+                crossingDirection = TripWire::Direction::LeftToRight;
+            } else {
+                crossingDirection = TripWire::Direction::RightToLeft;
+            }
+        } else {
+            // 垂直线为主，判断上下
+            if (currPoint.y > prevPoint.y) {
+                crossingDirection = TripWire::Direction::TopToBottom;
+            } else {
+                crossingDirection = TripWire::Direction::BottomToTop;
+            }
+        }
+        return true;
+    }
+
+    return false;
+}
+
+bool DetectorModel::isDirectionMatching(TripWire::Direction wireDirection, TripWire::Direction crossingDirection)
+{
+    if (wireDirection == TripWire::Direction::Bidirectional) {
+        return true;
+    }
+
+    return wireDirection == crossingDirection;
+}
+
+// ==========================================
+// 人员聚集检测实现
+// ==========================================
+
+void DetectorModel::setCrowdZone(const std::vector<cv::Point>& zone)
+{
+    crowdZone = zone;
+}
+
+void DetectorModel::clearCrowdZone()
+{
+    crowdZone.clear();
+}
+
+std::vector<CrowdAlert> DetectorModel::detectCrowd(const cv::Mat& frame, const std::vector<DetectionResult>& results)
+{
+    std::vector<CrowdAlert> alerts;
+
+    if (!crowdDetectionEnabled) {
+        return alerts;
+    }
+
+    // 统计检测到的人
+    std::vector<cv::Point> personCenters;
+    for (const auto& result : results) {
+        if (result.className == "person" || result.className == "人") {
+            // 检查是否有警戒区域，如果有则只统计区域内的人
+            if (crowdZone.empty()) {
+                // 没有警戒区域，统计所有检测到的人
+                personCenters.push_back(result.center);
+            } else {
+                // 有警戒区域，只统计区域内的人
+                if (isPointInPolygon(result.center, crowdZone)) {
+                    personCenters.push_back(result.center);
+                }
+            }
+        }
+    }
+
+    // 检查是否超过阈值
+    if (personCenters.size() >= (size_t)crowdThreshold) {
+        CrowdAlert alert;
+        alert.personCount = (int)personCenters.size();
+        alert.zoneName = crowdZone.empty() ? "Full Screen" : "Crowd Zone";
+
+        // 计算聚集中心
+        if (!personCenters.empty()) {
+            int avgX = 0, avgY = 0;
+            for (const auto& center : personCenters) {
+                avgX += center.x;
+                avgY += center.y;
+            }
+            avgX /= (int)personCenters.size();
+            avgY /= (int)personCenters.size();
+            alert.alertCenter = cv::Point(avgX, avgY);
+        }
+
+        alerts.push_back(alert);
+    }
+
+    return alerts;
+}
+

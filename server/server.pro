@@ -1,4 +1,4 @@
-QT       += core gui network
+QT       += core gui network sql
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -22,12 +22,14 @@ SOURCES += \
     detectormodel.cpp \
     main.cpp \
     mainwindow.cpp \
-    tcpserver.cpp
+    tcpserver.cpp \
+    database.cpp
 
 HEADERS += \
     detectormodel.h \
     mainwindow.h \
-    tcpserver.h
+    tcpserver.h \
+    database.h
 
 FORMS += \
     mainwindow.ui

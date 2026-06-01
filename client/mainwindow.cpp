@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include <QDebug>
+#include <QFile>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QDateTime>
@@ -76,9 +77,25 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
+void MainWindow::loadStyleSheet()
+{
+    // 尝试从服务器端的样式文件加载
+    QFile file("../server/styles.qss");
+    if (file.exists()) {
+        file.open(QFile::ReadOnly);
+        QString styleSheet = QLatin1String(file.readAll());
+        qApp->setStyleSheet(styleSheet);
+        file.close();
+    }
+}
+
 void MainWindow::setupUI()
 {
     this->setWindowTitle("Smart Security - Client");
+    this->setMinimumSize(1000, 700);
+
+    // 加载样式
+    loadStyleSheet();
 
     QLabel* hostLabel = new QLabel("Server:", this);
     QLineEdit* hostEdit = new QLineEdit("127.0.0.1", this);
@@ -86,52 +103,90 @@ void MainWindow::setupUI()
     QLineEdit* portEdit = new QLineEdit("8888", this);
     QPushButton* connectBtn = new QPushButton("Connect", this);
     QPushButton* disconnectBtn = new QPushButton("Disconnect", this);
+    disconnectBtn->setObjectName("dangerBtn");
 
     QPushButton* startCameraBtn = new QPushButton("Start Camera", this);
     QPushButton* stopCameraBtn = new QPushButton("Stop Camera", this);
+    stopCameraBtn->setObjectName("dangerBtn");
     QPushButton* captureBtn = new QPushButton("Capture", this);
-    QPushButton* sendFrameBtn = new QPushButton("Send Frame to Server", this);
+    captureBtn->setObjectName("successBtn");
 
     QSplitter* splitter = new QSplitter(Qt::Horizontal, this);
     QLabel* localVideoLabel = new QLabel(this);
     localVideoLabel->setAlignment(Qt::AlignCenter);
-    localVideoLabel->setStyleSheet("background-color: black;");
+    localVideoLabel->setStyleSheet("background-color: black; border: 2px solid #333;");
+    localVideoLabel->setMinimumSize(320, 240);
     QLabel* remoteVideoLabel = new QLabel(this);
     remoteVideoLabel->setAlignment(Qt::AlignCenter);
-    remoteVideoLabel->setStyleSheet("background-color: #2b2b2b;");
+    remoteVideoLabel->setStyleSheet("background-color: #1a1a2e; border: 2px solid #333;");
+    remoteVideoLabel->setMinimumSize(320, 240);
 
     QWidget* controlPanel = new QWidget(this);
     QVBoxLayout* controlLayout = new QVBoxLayout(controlPanel);
     QGroupBox* serverGroup = new QGroupBox("Server Connection", this);
-    QHBoxLayout* serverLayout = new QHBoxLayout(serverGroup);
-    serverLayout->addWidget(hostLabel);
-    serverLayout->addWidget(hostEdit);
-    serverLayout->addWidget(portLabel);
-    serverLayout->addWidget(portEdit);
-    serverLayout->addWidget(connectBtn);
-    serverLayout->addWidget(disconnectBtn);
+    QVBoxLayout* serverLayout = new QVBoxLayout(serverGroup);
+    
+    QHBoxLayout* serverInputLayout = new QHBoxLayout();
+    serverInputLayout->addWidget(hostLabel);
+    serverInputLayout->addWidget(hostEdit);
+    serverInputLayout->addWidget(portLabel);
+    portEdit->setMaximumWidth(80);
+    serverInputLayout->addWidget(portEdit);
+    
+    QHBoxLayout* serverBtnLayout = new QHBoxLayout();
+    serverBtnLayout->addWidget(connectBtn);
+    serverBtnLayout->addWidget(disconnectBtn);
+    
+    serverLayout->addLayout(serverInputLayout);
+    serverLayout->addLayout(serverBtnLayout);
 
     QGroupBox* cameraGroup = new QGroupBox("Camera Controls", this);
-    QHBoxLayout* cameraLayout = new QHBoxLayout(cameraGroup);
-    cameraLayout->addWidget(startCameraBtn);
-    cameraLayout->addWidget(stopCameraBtn);
-    cameraLayout->addWidget(captureBtn);
-    cameraLayout->addWidget(sendFrameBtn);
+    QVBoxLayout* cameraLayout = new QVBoxLayout(cameraGroup);
+    
+    QHBoxLayout* cameraBtnLayout = new QHBoxLayout();
+    cameraBtnLayout->addWidget(startCameraBtn);
+    cameraBtnLayout->addWidget(stopCameraBtn);
+    cameraBtnLayout->addWidget(captureBtn);
+    
+    cameraLayout->addLayout(cameraBtnLayout);
 
     QGroupBox* logGroup = new QGroupBox("Log", this);
     QVBoxLayout* logLayout = new QVBoxLayout(logGroup);
     QTextEdit* logTextEdit = new QTextEdit(this);
     logTextEdit->setReadOnly(true);
+    logTextEdit->setMaximumHeight(150);
     logLayout->addWidget(logTextEdit);
 
     controlLayout->addWidget(serverGroup);
     controlLayout->addWidget(cameraGroup);
     controlLayout->addWidget(logGroup);
+    controlLayout->addStretch();
 
     QWidget* videoPanel = new QWidget(this);
-    QHBoxLayout* videoLayout = new QHBoxLayout(videoPanel);
-    videoLayout->addWidget(localVideoLabel);
-    videoLayout->addWidget(remoteVideoLabel);
+    QVBoxLayout* videoPanelLayout = new QVBoxLayout(videoPanel);
+    
+    QGroupBox* videoGroup = new QGroupBox("Video Display", this);
+    QHBoxLayout* videoLayout = new QHBoxLayout(videoGroup);
+    
+    QWidget* localVideoContainer = new QWidget(this);
+    QVBoxLayout* localVideoContainerLayout = new QVBoxLayout(localVideoContainer);
+    QLabel* localLabelTitle = new QLabel("Local Camera", this);
+    localLabelTitle->setAlignment(Qt::AlignCenter);
+    localVideoContainerLayout->addWidget(localLabelTitle);
+    localVideoContainerLayout->addWidget(localVideoLabel);
+    
+    QWidget* remoteVideoContainer = new QWidget(this);
+    QVBoxLayout* remoteVideoContainerLayout = new QVBoxLayout(remoteVideoContainer);
+    QLabel* remoteLabelTitle = new QLabel("Server Detection", this);
+    remoteLabelTitle->setAlignment(Qt::AlignCenter);
+    remoteVideoContainerLayout->addWidget(remoteLabelTitle);
+    remoteVideoContainerLayout->addWidget(remoteVideoLabel);
+    
+    videoLayout->addWidget(localVideoContainer);
+    videoLayout->addWidget(remoteVideoContainer);
+    
+    videoPanelLayout->addWidget(videoGroup);
+    
     localVideoLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     remoteVideoLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
@@ -143,6 +198,8 @@ void MainWindow::setupUI()
     QWidget* centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
     QVBoxLayout* mainLayout = new QVBoxLayout(centralWidget);
+    mainLayout->setContentsMargins(12, 12, 12, 12);
+    mainLayout->setSpacing(12);
     mainLayout->addWidget(splitter);
 
     connect(connectBtn, &QPushButton::clicked, this, [this, hostEdit, portEdit]() {
@@ -154,7 +211,6 @@ void MainWindow::setupUI()
     connect(startCameraBtn, &QPushButton::clicked, this, &MainWindow::onStartCameraClicked);
     connect(stopCameraBtn, &QPushButton::clicked, this, &MainWindow::onStopCameraClicked);
     connect(captureBtn, &QPushButton::clicked, this, &MainWindow::onCaptureClicked);
-    connect(sendFrameBtn, &QPushButton::clicked, this, &MainWindow::onSendFrameClicked);
 
     // Store pointers in member variables
     this->localVideoLabel = localVideoLabel;

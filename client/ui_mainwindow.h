@@ -11,7 +11,6 @@
 
 #include <QtCore/QVariant>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QCheckBox>
 #include <QtWidgets/QGroupBox>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
@@ -20,7 +19,6 @@
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpacerItem>
 #include <QtWidgets/QSplitter>
-#include <QtWidgets/QStatusBar>
 #include <QtWidgets/QTextEdit>
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QWidget>
@@ -30,8 +28,8 @@ QT_BEGIN_NAMESPACE
 class Ui_MainWindow
 {
 public:
-    QWidget *centralwidget;
-    QVBoxLayout *verticalLayout;
+    QWidget *centralWidget;
+    QVBoxLayout *mainLayout;
     QSplitter *splitter;
     QWidget *videoPanel;
     QVBoxLayout *videoPanelLayout;
@@ -40,7 +38,7 @@ public:
     QWidget *localVideoContainer;
     QVBoxLayout *localVideoContainerLayout;
     QLabel *localLabelTitle;
-    QLabel *videoLabel;
+    QLabel *localVideoLabel;
     QWidget *remoteVideoContainer;
     QVBoxLayout *remoteVideoContainerLayout;
     QLabel *remoteLabelTitle;
@@ -50,46 +48,35 @@ public:
     QGroupBox *serverGroup;
     QVBoxLayout *serverGroupLayout;
     QHBoxLayout *serverInputLayout;
+    QLabel *hostLabel;
+    QLineEdit *hostEdit;
     QLabel *portLabel;
     QLineEdit *portEdit;
     QSpacerItem *horizontalSpacer;
     QHBoxLayout *serverBtnLayout;
-    QPushButton *startServerBtn;
-    QPushButton *stopServerBtn;
+    QPushButton *connectBtn;
+    QPushButton *disconnectBtn;
     QGroupBox *cameraGroup;
-    QVBoxLayout *cameraGroupLayout;
     QHBoxLayout *cameraBtnLayout;
     QPushButton *startCameraBtn;
     QPushButton *stopCameraBtn;
     QPushButton *captureBtn;
-    QPushButton *recordBtn;
-    QGroupBox *detectionGroup;
-    QVBoxLayout *detectionGroupLayout;
-    QCheckBox *motionDetectCheck;
-    QCheckBox *regionDetectCheck;
-    QCheckBox *lineCrossCheck;
-    QCheckBox *crowdDetectCheck;
-    QHBoxLayout *configBtnLayout;
-    QPushButton *setRegionBtn;
-    QPushButton *setLineBtn;
-    QPushButton *settingsBtn;
     QGroupBox *logGroup;
     QVBoxLayout *logGroupLayout;
     QTextEdit *logTextEdit;
     QSpacerItem *verticalSpacer;
-    QStatusBar *statusbar;
 
     void setupUi(QMainWindow *MainWindow)
     {
         if (MainWindow->objectName().isEmpty())
             MainWindow->setObjectName("MainWindow");
-        MainWindow->resize(1200, 800);
-        MainWindow->setMinimumSize(QSize(1200, 800));
-        centralwidget = new QWidget(MainWindow);
-        centralwidget->setObjectName("centralwidget");
-        verticalLayout = new QVBoxLayout(centralwidget);
-        verticalLayout->setObjectName("verticalLayout");
-        splitter = new QSplitter(centralwidget);
+        MainWindow->resize(1000, 700);
+        MainWindow->setMinimumSize(QSize(1000, 700));
+        centralWidget = new QWidget(MainWindow);
+        centralWidget->setObjectName("centralWidget");
+        mainLayout = new QVBoxLayout(centralWidget);
+        mainLayout->setObjectName("mainLayout");
+        splitter = new QSplitter(centralWidget);
         splitter->setObjectName("splitter");
         splitter->setOrientation(Qt::Horizontal);
         videoPanel = new QWidget(splitter);
@@ -112,13 +99,13 @@ public:
 
         localVideoContainerLayout->addWidget(localLabelTitle);
 
-        videoLabel = new QLabel(localVideoContainer);
-        videoLabel->setObjectName("videoLabel");
-        videoLabel->setMinimumSize(QSize(320, 240));
-        videoLabel->setStyleSheet(QString::fromUtf8("background-color: black; border: 2px solid #333;"));
-        videoLabel->setAlignment(Qt::AlignCenter);
+        localVideoLabel = new QLabel(localVideoContainer);
+        localVideoLabel->setObjectName("localVideoLabel");
+        localVideoLabel->setMinimumSize(QSize(320, 240));
+        localVideoLabel->setStyleSheet(QString::fromUtf8("background-color: black; border: 2px solid #333;"));
+        localVideoLabel->setAlignment(Qt::AlignCenter);
 
-        localVideoContainerLayout->addWidget(videoLabel);
+        localVideoContainerLayout->addWidget(localVideoLabel);
 
 
         videoGroupLayout->addWidget(localVideoContainer);
@@ -160,6 +147,16 @@ public:
         serverGroupLayout->setObjectName("serverGroupLayout");
         serverInputLayout = new QHBoxLayout();
         serverInputLayout->setObjectName("serverInputLayout");
+        hostLabel = new QLabel(serverGroup);
+        hostLabel->setObjectName("hostLabel");
+
+        serverInputLayout->addWidget(hostLabel);
+
+        hostEdit = new QLineEdit(serverGroup);
+        hostEdit->setObjectName("hostEdit");
+
+        serverInputLayout->addWidget(hostEdit);
+
         portLabel = new QLabel(serverGroup);
         portLabel->setObjectName("portLabel");
 
@@ -180,15 +177,15 @@ public:
 
         serverBtnLayout = new QHBoxLayout();
         serverBtnLayout->setObjectName("serverBtnLayout");
-        startServerBtn = new QPushButton(serverGroup);
-        startServerBtn->setObjectName("startServerBtn");
+        connectBtn = new QPushButton(serverGroup);
+        connectBtn->setObjectName("connectBtn");
 
-        serverBtnLayout->addWidget(startServerBtn);
+        serverBtnLayout->addWidget(connectBtn);
 
-        stopServerBtn = new QPushButton(serverGroup);
-        stopServerBtn->setObjectName("stopServerBtn");
+        disconnectBtn = new QPushButton(serverGroup);
+        disconnectBtn->setObjectName("disconnectBtn");
 
-        serverBtnLayout->addWidget(stopServerBtn);
+        serverBtnLayout->addWidget(disconnectBtn);
 
 
         serverGroupLayout->addLayout(serverBtnLayout);
@@ -198,9 +195,7 @@ public:
 
         cameraGroup = new QGroupBox(controlPanel);
         cameraGroup->setObjectName("cameraGroup");
-        cameraGroupLayout = new QVBoxLayout(cameraGroup);
-        cameraGroupLayout->setObjectName("cameraGroupLayout");
-        cameraBtnLayout = new QHBoxLayout();
+        cameraBtnLayout = new QHBoxLayout(cameraGroup);
         cameraBtnLayout->setObjectName("cameraBtnLayout");
         startCameraBtn = new QPushButton(cameraGroup);
         startCameraBtn->setObjectName("startCameraBtn");
@@ -217,64 +212,8 @@ public:
 
         cameraBtnLayout->addWidget(captureBtn);
 
-        recordBtn = new QPushButton(cameraGroup);
-        recordBtn->setObjectName("recordBtn");
-        recordBtn->setCheckable(true);
-
-        cameraBtnLayout->addWidget(recordBtn);
-
-
-        cameraGroupLayout->addLayout(cameraBtnLayout);
-
 
         controlPanelLayout->addWidget(cameraGroup);
-
-        detectionGroup = new QGroupBox(controlPanel);
-        detectionGroup->setObjectName("detectionGroup");
-        detectionGroupLayout = new QVBoxLayout(detectionGroup);
-        detectionGroupLayout->setObjectName("detectionGroupLayout");
-        motionDetectCheck = new QCheckBox(detectionGroup);
-        motionDetectCheck->setObjectName("motionDetectCheck");
-
-        detectionGroupLayout->addWidget(motionDetectCheck);
-
-        regionDetectCheck = new QCheckBox(detectionGroup);
-        regionDetectCheck->setObjectName("regionDetectCheck");
-
-        detectionGroupLayout->addWidget(regionDetectCheck);
-
-        lineCrossCheck = new QCheckBox(detectionGroup);
-        lineCrossCheck->setObjectName("lineCrossCheck");
-
-        detectionGroupLayout->addWidget(lineCrossCheck);
-
-        crowdDetectCheck = new QCheckBox(detectionGroup);
-        crowdDetectCheck->setObjectName("crowdDetectCheck");
-
-        detectionGroupLayout->addWidget(crowdDetectCheck);
-
-        configBtnLayout = new QHBoxLayout();
-        configBtnLayout->setObjectName("configBtnLayout");
-        setRegionBtn = new QPushButton(detectionGroup);
-        setRegionBtn->setObjectName("setRegionBtn");
-
-        configBtnLayout->addWidget(setRegionBtn);
-
-        setLineBtn = new QPushButton(detectionGroup);
-        setLineBtn->setObjectName("setLineBtn");
-
-        configBtnLayout->addWidget(setLineBtn);
-
-
-        detectionGroupLayout->addLayout(configBtnLayout);
-
-        settingsBtn = new QPushButton(detectionGroup);
-        settingsBtn->setObjectName("settingsBtn");
-
-        detectionGroupLayout->addWidget(settingsBtn);
-
-
-        controlPanelLayout->addWidget(detectionGroup);
 
         logGroup = new QGroupBox(controlPanel);
         logGroup->setObjectName("logGroup");
@@ -282,7 +221,7 @@ public:
         logGroupLayout->setObjectName("logGroupLayout");
         logTextEdit = new QTextEdit(logGroup);
         logTextEdit->setObjectName("logTextEdit");
-        logTextEdit->setMaximumSize(QSize(16777215, 180));
+        logTextEdit->setMaximumSize(QSize(16777215, 150));
         logTextEdit->setReadOnly(true);
 
         logGroupLayout->addWidget(logTextEdit);
@@ -296,12 +235,9 @@ public:
 
         splitter->addWidget(controlPanel);
 
-        verticalLayout->addWidget(splitter);
+        mainLayout->addWidget(splitter);
 
-        MainWindow->setCentralWidget(centralwidget);
-        statusbar = new QStatusBar(MainWindow);
-        statusbar->setObjectName("statusbar");
-        MainWindow->setStatusBar(statusbar);
+        MainWindow->setCentralWidget(centralWidget);
 
         retranslateUi(MainWindow);
 
@@ -310,30 +246,23 @@ public:
 
     void retranslateUi(QMainWindow *MainWindow)
     {
-        MainWindow->setWindowTitle(QCoreApplication::translate("MainWindow", "Intelligent Security System - Server", nullptr));
+        MainWindow->setWindowTitle(QCoreApplication::translate("MainWindow", "Smart Security - Client", nullptr));
         videoGroup->setTitle(QCoreApplication::translate("MainWindow", "Video Display", nullptr));
         localLabelTitle->setText(QCoreApplication::translate("MainWindow", "Local Camera", nullptr));
-        videoLabel->setText(QString());
-        remoteLabelTitle->setText(QCoreApplication::translate("MainWindow", "Client Video", nullptr));
+        localVideoLabel->setText(QString());
+        remoteLabelTitle->setText(QCoreApplication::translate("MainWindow", "Server Detection", nullptr));
         remoteVideoLabel->setText(QString());
-        serverGroup->setTitle(QCoreApplication::translate("MainWindow", "Server Control", nullptr));
+        serverGroup->setTitle(QCoreApplication::translate("MainWindow", "Server Connection", nullptr));
+        hostLabel->setText(QCoreApplication::translate("MainWindow", "Server:", nullptr));
+        hostEdit->setText(QCoreApplication::translate("MainWindow", "127.0.0.1", nullptr));
         portLabel->setText(QCoreApplication::translate("MainWindow", "Port:", nullptr));
         portEdit->setText(QCoreApplication::translate("MainWindow", "8888", nullptr));
-        startServerBtn->setText(QCoreApplication::translate("MainWindow", "Start Server", nullptr));
-        stopServerBtn->setText(QCoreApplication::translate("MainWindow", "Stop Server", nullptr));
-        cameraGroup->setTitle(QCoreApplication::translate("MainWindow", "Camera Control", nullptr));
+        connectBtn->setText(QCoreApplication::translate("MainWindow", "Connect", nullptr));
+        disconnectBtn->setText(QCoreApplication::translate("MainWindow", "Disconnect", nullptr));
+        cameraGroup->setTitle(QCoreApplication::translate("MainWindow", "Camera Controls", nullptr));
         startCameraBtn->setText(QCoreApplication::translate("MainWindow", "Start Camera", nullptr));
         stopCameraBtn->setText(QCoreApplication::translate("MainWindow", "Stop Camera", nullptr));
         captureBtn->setText(QCoreApplication::translate("MainWindow", "Capture", nullptr));
-        recordBtn->setText(QCoreApplication::translate("MainWindow", "Record", nullptr));
-        detectionGroup->setTitle(QCoreApplication::translate("MainWindow", "Detection Functions", nullptr));
-        motionDetectCheck->setText(QCoreApplication::translate("MainWindow", "Motion Detection", nullptr));
-        regionDetectCheck->setText(QCoreApplication::translate("MainWindow", "Region Detection", nullptr));
-        lineCrossCheck->setText(QCoreApplication::translate("MainWindow", "Line Crossing Detection", nullptr));
-        crowdDetectCheck->setText(QCoreApplication::translate("MainWindow", "Crowd Detection", nullptr));
-        setRegionBtn->setText(QCoreApplication::translate("MainWindow", "Set Detection Region", nullptr));
-        setLineBtn->setText(QCoreApplication::translate("MainWindow", "Set Crossing Line", nullptr));
-        settingsBtn->setText(QCoreApplication::translate("MainWindow", "Settings", nullptr));
         logGroup->setTitle(QCoreApplication::translate("MainWindow", "Log", nullptr));
     } // retranslateUi
 

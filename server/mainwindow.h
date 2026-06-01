@@ -17,9 +17,21 @@
 #include <QFileInfoList>
 #include <QListWidgetItem>
 #include <QMutex>
+#include <QTableWidget>
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QHeaderView>
+#include <QComboBox>
+#include <QDateTimeEdit>
+#include <QPushButton>
+#include <QGroupBox>
+#include <QSpinBox>
+#include <QSlider>
 #include <opencv2/opencv.hpp>
 #include "tcpserver.h"
 #include "detectormodel.h"
+#include "database.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -114,6 +126,7 @@ private:
     // 历史查询相关
     QPushButton* browseCapturesBtn;
     QPushButton* browseRecordingsBtn;
+    QPushButton* browseLogsBtn;
     QPushButton* deleteSelectedBtn;
     QListWidget* historyListWidget;
     QLabel* historyPreviewLabel;
@@ -123,6 +136,8 @@ private:
     void drawResultsOnFrame(cv::Mat& frame, const std::vector<DetectionResult>& results);
     void drawMotionBlobsOnFrame(cv::Mat& frame, const std::vector<MotionBlob>& blobs);
     void drawGuardZonesOnFrame(cv::Mat& frame);
+    void drawTripWiresOnFrame(cv::Mat& frame);
+    void drawCrowdZoneOnFrame(cv::Mat& frame);
     bool saveCapture(const cv::Mat& frame);
     bool startRecording(const cv::Mat& frame);
     void stopRecording();
@@ -131,5 +146,50 @@ private:
     void browseHistoryFiles(const QString& directory, const QString& filter);
     void onHistoryItemSelected(QListWidgetItem* item);
     void deleteSelectedHistoryItem();
+    void onBrowseLogsClicked();
+    void showLogViewerDialog();
+    void onSettingsClicked();
+    void showSettingsDialog();
+    
+    // 越线检测相关
+    void onAddTripWireClicked();
+    void onClearTripWiresClicked();
+    
+    // 人员聚集检测相关
+    void onAddCrowdZoneClicked();
+    void onClearCrowdZoneClicked();
+    
+private:
+    // 越线检测状态
+    bool isTripWireDetectionEnabled = false;
+    
+    // UI Widgets
+    QCheckBox* tripWireDetectionCheckBox;
+    QPushButton* addTripWireBtn;
+    QPushButton* clearTripWiresBtn;
+    
+    // 人员聚集检测状态
+    bool isCrowdDetectionEnabled = false;
+    
+    // UI Widgets
+    QCheckBox* crowdDetectionCheckBox;
+    QPushButton* addCrowdZoneBtn;
+    QPushButton* clearCrowdZoneBtn;
+    
+    // 当前语言
+    QString currentLanguage = "en";
+    
+    // 加载样式函数
+    void loadStyleSheet();
+    void retranslateUI();
+
+    
+    // 报警自动截图/录像
+    QTimer* alarmRecordingTimer;
+    bool isAlarmRecording;
+    int alarmRecordingDuration; // 报警录像持续时间（秒）
+    
+    void onAlarmTriggered(const cv::Mat& frame);
+    void onAlarmRecordingTimeout();
 };
 #endif // MAINWINDOW_H

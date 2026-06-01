@@ -77,6 +77,7 @@ private:
     QTextEdit* logTextEdit;
 
     void setupUI();
+    void loadStyleSheet();
     void drawResultsOnFrame(QImage& frame, const std::vector<DetectionResult>& results);
     bool saveCapture(const QImage& frame);
 };

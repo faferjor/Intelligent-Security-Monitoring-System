@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include <QDebug>
+#include <QFile>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QDateTime>
@@ -16,6 +17,7 @@
 #include <QCoreApplication>
 #include <QGroupBox>
 #include <QMutexLocker>
+#include <QMouseEvent>
 
 DetectionThread::DetectionThread(QObject *parent) : QThread(parent)
 {
@@ -52,14 +54,29 @@ MainWindow::MainWindow(QWidget *parent)
     detector = new DetectorModel(this);
     detectionThread = new DetectionThread(this);
     cameraTimer = new QTimer(this);
+    alarmRecordingTimer = new QTimer(this);
+    
+    // 初始化报警录像变量
+    isAlarmRecording = false;
+    alarmRecordingDuration = 10; // 默认报警录像10秒
 
     // 获取应用程序运行目录
     QString appDir = "C:/Users/fafer/Desktop/Intelligent-Security-Monitoring-System/server/build/Desktop_Qt_6_5_3_MinGW_64_bit-Debug";
     QString modelPath = appDir + "/yolov8n.onnx";
     QString classesPath = appDir + "/coco.names";
+    QString dbPath = appDir + "/security_logs.db";
     qDebug() << "Application directory:" << appDir;
     qDebug() << "Model Path:" << modelPath;
     qDebug() << "Classes Path:" << classesPath;
+    qDebug() << "Database Path:" << dbPath;
+
+    // 初始化数据库
+    if (!Database::instance().init(dbPath)) {
+        QMessageBox::warning(this, "Database Error", 
+                            "Failed to initialize database:\n" + Database::instance().lastError());
+    } else {
+        updateLog("Database initialized successfully.");
+    }
 
     // 尝试从运行目录加载
     bool modelLoaded = detector->loadModel(modelPath.toStdString(), classesPath.toStdString());
@@ -85,6 +102,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(tcpServer, &TcpServer::clientDisconnected, this, &MainWindow::onClientDisconnected);
     connect(tcpServer, &TcpServer::messageReceived, this, &MainWindow::onMessageReceived);
     connect(tcpServer, &TcpServer::frameReceived, this, &MainWindow::onFrameReceived);
+    connect(alarmRecordingTimer, &QTimer::timeout, this, &MainWindow::onAlarmRecordingTimeout);
 
     updateLog("Smart Security Server initialized. Full screen detection enabled by default.");
 }
@@ -106,9 +124,33 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
+void MainWindow::loadStyleSheet()
+{
+    QFile file(":/styles.qss");
+    if (file.exists()) {
+        file.open(QFile::ReadOnly);
+        QString styleSheet = QLatin1String(file.readAll());
+        qApp->setStyleSheet(styleSheet);
+        file.close();
+    } else {
+        // 如果资源文件不存在，尝试从本地文件加载
+        QFile localFile("styles.qss");
+        if (localFile.exists()) {
+            localFile.open(QFile::ReadOnly);
+            QString styleSheet = QLatin1String(localFile.readAll());
+            qApp->setStyleSheet(styleSheet);
+            localFile.close();
+        }
+    }
+}
+
 void MainWindow::setupUI()
 {
     this->setWindowTitle("Smart Security - Server");
+    this->setMinimumSize(1200, 800);
+
+    // 加载样式
+    loadStyleSheet();
 
     QPushButton* startServerBtn = new QPushButton("Start Server", this);
     QPushButton* stopServerBtn = new QPushButton("Stop Server", this);
@@ -120,29 +162,80 @@ void MainWindow::setupUI()
     zoneDetectionCheckBox = new QCheckBox("Enable Zone Detection", this);
     addZoneBtn = new QPushButton("Add Guard Zone", this);
     clearZonesBtn = new QPushButton("Clear Zones", this);
+    tripWireDetectionCheckBox = new QCheckBox("Enable Trip Wire Detection", this);
+    addTripWireBtn = new QPushButton("Add Trip Wire", this);
+    clearTripWiresBtn = new QPushButton("Clear Trip Wires", this);
+    crowdDetectionCheckBox = new QCheckBox("Enable Crowd Detection", this);
+    addCrowdZoneBtn = new QPushButton("Add Crowd Zone", this);
+    clearCrowdZoneBtn = new QPushButton("Clear Crowd Zone", this);
+
+    // 设置按钮对象名，用于QSS样式
+    stopServerBtn->setObjectName("dangerBtn");
+    stopCameraBtn->setObjectName("dangerBtn");
+    clearZonesBtn->setObjectName("warningBtn");
+    clearTripWiresBtn->setObjectName("warningBtn");
+    clearCrowdZoneBtn->setObjectName("warningBtn");
+    captureBtn->setObjectName("successBtn");
 
     QLineEdit* portEdit = new QLineEdit("8888", this);
     QLabel* portLabel = new QLabel("Port:", this);
+    portEdit->setMaximumWidth(100);
 
     QWidget* centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
     QVBoxLayout* mainLayout = new QVBoxLayout(centralWidget);
+    mainLayout->setSpacing(12);
+    mainLayout->setContentsMargins(12, 12, 12, 12);
     
-    QHBoxLayout* serverLayout = new QHBoxLayout();
+    // 服务器控制分组框
+    QGroupBox* serverGroup = new QGroupBox("Server Control", this);
+    QHBoxLayout* serverLayout = new QHBoxLayout(serverGroup);
     serverLayout->addWidget(portLabel);
     serverLayout->addWidget(portEdit);
     serverLayout->addWidget(startServerBtn);
     serverLayout->addWidget(stopServerBtn);
-
-    QHBoxLayout* cameraLayout = new QHBoxLayout();
+    serverLayout->addStretch();
+    
+    // 摄像头控制分组框
+    QGroupBox* cameraGroup = new QGroupBox("Camera Control", this);
+    QHBoxLayout* cameraLayout = new QHBoxLayout(cameraGroup);
     cameraLayout->addWidget(startCameraBtn);
     cameraLayout->addWidget(stopCameraBtn);
     cameraLayout->addWidget(captureBtn);
     cameraLayout->addWidget(recordBtn);
-    cameraLayout->addWidget(motionDetectionCheckBox);
-    cameraLayout->addWidget(zoneDetectionCheckBox);
-    cameraLayout->addWidget(addZoneBtn);
-    cameraLayout->addWidget(clearZonesBtn);
+    cameraLayout->addSpacing(20);
+    
+    // 检测功能分组框
+    QGroupBox* detectionGroup = new QGroupBox("Detection Functions", this);
+    QVBoxLayout* detectionLayout = new QVBoxLayout(detectionGroup);
+    
+    QHBoxLayout* motionLayout = new QHBoxLayout();
+    motionLayout->addWidget(motionDetectionCheckBox);
+    motionLayout->addStretch();
+    detectionLayout->addLayout(motionLayout);
+    
+    QHBoxLayout* zoneLayout = new QHBoxLayout();
+    zoneLayout->addWidget(zoneDetectionCheckBox);
+    zoneLayout->addWidget(addZoneBtn);
+    zoneLayout->addWidget(clearZonesBtn);
+    zoneLayout->addStretch();
+    detectionLayout->addLayout(zoneLayout);
+    
+    QHBoxLayout* tripWireLayout = new QHBoxLayout();
+    tripWireLayout->addWidget(tripWireDetectionCheckBox);
+    tripWireLayout->addWidget(addTripWireBtn);
+    tripWireLayout->addWidget(clearTripWiresBtn);
+    tripWireLayout->addStretch();
+    detectionLayout->addLayout(tripWireLayout);
+    
+    QHBoxLayout* crowdLayout = new QHBoxLayout();
+    crowdLayout->addWidget(crowdDetectionCheckBox);
+    crowdLayout->addWidget(addCrowdZoneBtn);
+    crowdLayout->addWidget(clearCrowdZoneBtn);
+    crowdLayout->addStretch();
+    detectionLayout->addLayout(crowdLayout);
+    
+    QPushButton* settingsBtn = new QPushButton("Settings", this);
 
     QSplitter* splitter = new QSplitter(Qt::Horizontal, this);
     
@@ -187,9 +280,11 @@ void MainWindow::setupUI()
     QHBoxLayout* historyBtnLayout = new QHBoxLayout();
     browseCapturesBtn = new QPushButton("Browse Captures", this);
     browseRecordingsBtn = new QPushButton("Browse Recordings", this);
+    browseLogsBtn = new QPushButton("Browse Logs", this);
     deleteSelectedBtn = new QPushButton("Delete Selected", this);
     historyBtnLayout->addWidget(browseCapturesBtn);
     historyBtnLayout->addWidget(browseRecordingsBtn);
+    historyBtnLayout->addWidget(browseLogsBtn);
     historyBtnLayout->addWidget(deleteSelectedBtn);
     
     historyListWidget = new QListWidget(this);
@@ -216,9 +311,17 @@ void MainWindow::setupUI()
     splitter->setStretchFactor(0, 3);
     splitter->setStretchFactor(1, 1);
 
-    mainLayout->addLayout(serverLayout);
-    mainLayout->addLayout(cameraLayout);
-    mainLayout->addWidget(splitter);
+    // 添加分组框和控件到主布局
+    mainLayout->addWidget(serverGroup);
+    mainLayout->addWidget(cameraGroup);
+    mainLayout->addWidget(detectionGroup);
+    
+    QHBoxLayout* settingsBtnLayout = new QHBoxLayout();
+    settingsBtnLayout->addStretch();
+    settingsBtnLayout->addWidget(settingsBtn);
+    mainLayout->addLayout(settingsBtnLayout);
+    
+    mainLayout->addWidget(splitter, 1);
 
     connect(startServerBtn, &QPushButton::clicked, this, [this, portEdit]() {
         quint16 port = portEdit->text().toUShort();
@@ -244,6 +347,24 @@ void MainWindow::setupUI()
         detector->clearGuardZones();
         updateLog("All guard zones cleared");
     });
+    connect(tripWireDetectionCheckBox, &QCheckBox::stateChanged, this, [this](int state) {
+        isTripWireDetectionEnabled = (state == Qt::Checked);
+        detector->setTripWireDetectionEnabled(isTripWireDetectionEnabled);
+        updateLog(isTripWireDetectionEnabled ? "Trip wire detection enabled" : "Trip wire detection disabled");
+    });
+    connect(addTripWireBtn, &QPushButton::clicked, this, &MainWindow::onAddTripWireClicked);
+    connect(clearTripWiresBtn, &QPushButton::clicked, this, &MainWindow::onClearTripWiresClicked);
+    
+    // 人员聚集检测信号连接
+    connect(crowdDetectionCheckBox, &QCheckBox::stateChanged, this, [this](int state) {
+        isCrowdDetectionEnabled = (state == Qt::Checked);
+        detector->setCrowdDetectionEnabled(isCrowdDetectionEnabled);
+        updateLog(isCrowdDetectionEnabled ? "Crowd detection enabled" : "Crowd detection disabled");
+    });
+    connect(addCrowdZoneBtn, &QPushButton::clicked, this, &MainWindow::onAddCrowdZoneClicked);
+    connect(clearCrowdZoneBtn, &QPushButton::clicked, this, &MainWindow::onClearCrowdZoneClicked);
+    
+    connect(settingsBtn, &QPushButton::clicked, this, &MainWindow::onSettingsClicked);
     
     // 历史查询相关连接
     connect(browseCapturesBtn, &QPushButton::clicked, this, [this]() {
@@ -252,6 +373,7 @@ void MainWindow::setupUI()
     connect(browseRecordingsBtn, &QPushButton::clicked, this, [this]() {
         browseHistoryFiles("recordings", "*.avi");
     });
+    connect(browseLogsBtn, &QPushButton::clicked, this, &MainWindow::onBrowseLogsClicked);
     connect(deleteSelectedBtn, &QPushButton::clicked, this, &MainWindow::deleteSelectedHistoryItem);
     connect(historyListWidget, &QListWidget::itemClicked, this, &MainWindow::onHistoryItemSelected);
 
@@ -429,6 +551,20 @@ void MainWindow::onFrameReceived(const QString& clientId, const QImage& frame)
         drawMotionBlobsOnFrame(matFrame, motionBlobs);
         for (const auto& blob : motionBlobs) {
             updateLog(QString("MOTION DETECTED from %1: Object %2 at (%3, %4)").arg(clientId.left(4)).arg(blob.id).arg(blob.center.x).arg(blob.center.y));
+            
+            // 记录到数据库
+            Database::instance().insertLog(
+                LOG_MOTION,
+                QString("运动检测: 目标 %1 (客户端)").arg(blob.id),
+                "motion",
+                1.0f,
+                blob.center.x,
+                blob.center.y,
+                "",
+                "",
+                "",
+                clientId
+            );
         }
     }
     
@@ -436,6 +572,29 @@ void MainWindow::onFrameReceived(const QString& clientId, const QImage& frame)
     std::vector<DetectionResult> results;
     if (isZoneDetectionEnabled) {
         results = detector->detect(matFrame);
+        
+        // 记录目标检测到数据库
+        for (const auto& result : results) {
+            LogType logType = LOG_DETECTION;
+            QString objType = QString::fromStdString(result.className);
+            if (objType == "fire") {
+                logType = LOG_FIRE;
+            } else if (objType == "smoke") {
+                logType = LOG_SMOKE;
+            }
+            Database::instance().insertLog(
+                logType,
+                QString("目标检测: %1 (客户端)").arg(objType),
+                objType,
+                result.confidence,
+                result.center.x,
+                result.center.y,
+                "",
+                "",
+                "",
+                clientId
+            );
+        }
     }
     
     // 保存检测结果
@@ -469,6 +628,23 @@ void MainWindow::onFrameReceived(const QString& clientId, const QImage& frame)
                 QString::fromStdString(alert.zoneName),
                 QString::number(alert.intrusionPoint.x),
                 QString::number(alert.intrusionPoint.y)));
+            
+            // 记录区域入侵到数据库
+            Database::instance().insertLog(
+                LOG_ZONE_ALERT,
+                QString("区域入侵: %1 在区域 '%2' (客户端)").arg(
+                    QString::fromStdString(alert.objectType),
+                    QString::fromStdString(alert.zoneName)
+                ),
+                QString::fromStdString(alert.objectType),
+                alert.confidence,
+                alert.intrusionPoint.x,
+                alert.intrusionPoint.y,
+                QString::fromStdString(alert.zoneName),
+                "",
+                "",
+                clientId
+            );
         }
         
         // 记录检测到的关键目标
@@ -531,7 +707,23 @@ void MainWindow::updateCameraFrame()
         drawMotionBlobsOnFrame(frame, motionBlobs);
         for (const auto& blob : motionBlobs) {
             updateLog(QString("MOTION DETECTED: Object %1 at (%2, %3)").arg(blob.id).arg(blob.center.x).arg(blob.center.y));
+            
+            // 记录到数据库
+            Database::instance().insertLog(
+                LOG_MOTION,
+                QString("运动检测: 目标 %1").arg(blob.id),
+                "motion",
+                1.0f,
+                blob.center.x,
+                blob.center.y,
+                "",
+                "",
+                "",
+                "local"
+            );
         }
+        // 报警自动截图/录像
+        onAlarmTriggered(frame);
     }
 
     // 每3帧执行一次目标检测（只在启用区域检测时进行）
@@ -548,6 +740,12 @@ void MainWindow::updateCameraFrame()
 
     // 绘制警戒区域
     drawGuardZonesOnFrame(frame);
+
+    // 绘制警戒线
+    drawTripWiresOnFrame(frame);
+
+    // 绘制聚集区域
+    drawCrowdZoneOnFrame(frame);
 
     // 将检测结果绘制在当前帧上（只在启用区域检测时）
     cv::Mat displayFrame = frame.clone();
@@ -599,6 +797,27 @@ void MainWindow::onDetectionCompleted(const std::vector<DetectionResult>& result
                     .arg(result.center.x)
                     .arg(result.center.y)
                     .arg(result.confidence, 0, 'f', 2));
+                
+                // 记录到数据库
+                LogType logType = LOG_DETECTION;
+                QString objType = QString::fromStdString(result.className);
+                if (objType == "fire") {
+                    logType = LOG_FIRE;
+                } else if (objType == "smoke") {
+                    logType = LOG_SMOKE;
+                }
+                Database::instance().insertLog(
+                    logType,
+                    QString("目标检测: %1").arg(objType),
+                    objType,
+                    result.confidence,
+                    result.center.x,
+                    result.center.y,
+                    "",
+                    "",
+                    "",
+                    "local"
+                );
             }
         }
 
@@ -632,6 +851,100 @@ void MainWindow::onDetectionCompleted(const std::vector<DetectionResult>& result
                     QString::fromStdString(alert.zoneName),
                     QString::number(alert.intrusionPoint.x),
                     QString::number(alert.intrusionPoint.y)));
+                
+                // 记录到数据库
+                Database::instance().insertLog(
+                    LOG_ZONE_ALERT,
+                    QString("区域入侵: %1 在区域 '%2'").arg(
+                        QString::fromStdString(alert.objectType),
+                        QString::fromStdString(alert.zoneName)
+                    ),
+                    QString::fromStdString(alert.objectType),
+                    alert.confidence,
+                    alert.intrusionPoint.x,
+                    alert.intrusionPoint.y,
+                    QString::fromStdString(alert.zoneName),
+                    "",
+                    "",
+                    "local"
+                );
+            }
+            // 报警自动截图/录像
+            onAlarmTriggered(frame);
+        }
+
+        // 越线检测
+        if (isTripWireDetectionEnabled) {
+            std::vector<TripWireAlert> tripWireAlerts = detector->detectTripWireCrossing(frame, results);
+
+            if (tripWireAlerts.empty()) {
+                qDebug() << "No trip wire crossing detected";
+            } else {
+                for (const auto& alert : tripWireAlerts) {
+                    QString dirStr;
+                    switch (alert.crossingDirection) {
+                        case TripWire::Direction::Bidirectional: dirStr = "Bidirectional"; break;
+                        case TripWire::Direction::LeftToRight: dirStr = "Left to Right"; break;
+                        case TripWire::Direction::RightToLeft: dirStr = "Right to Left"; break;
+                        case TripWire::Direction::TopToBottom: dirStr = "Top to Bottom"; break;
+                        case TripWire::Direction::BottomToTop: dirStr = "Bottom to Top"; break;
+                    }
+
+                    updateLog(QString("TRIP WIRE ALERT: %1 crossed wire '%2' at (%3, %4), direction: %5").arg(
+                        QString::fromStdString(alert.objectType),
+                        QString::fromStdString(alert.wireName),
+                        QString::number(alert.crossingPoint.x),
+                        QString::number(alert.crossingPoint.y),
+                        dirStr));
+
+                    // 记录到数据库
+                    Database::instance().insertLog(
+                        LOG_LINE_ALERT,
+                        QString("越线检测: %1 越过警戒线 '%2'").arg(
+                            QString::fromStdString(alert.objectType),
+                            QString::fromStdString(alert.wireName)
+                        ),
+                        QString::fromStdString(alert.objectType),
+                        alert.confidence,
+                        alert.crossingPoint.x,
+                        alert.crossingPoint.y,
+                        QString::fromStdString(alert.wireName),
+                        "",
+                        "",
+                        "local"
+                    );
+                }
+                // 报警自动截图/录像
+                onAlarmTriggered(frame);
+            }
+        }
+        
+        // 人员聚集检测
+        if (isCrowdDetectionEnabled) {
+            std::vector<CrowdAlert> crowdAlerts = detector->detectCrowd(frame, results);
+            
+            if (crowdAlerts.empty()) {
+                qDebug() << "No crowd detected";
+            } else {
+                for (const auto& alert : crowdAlerts) {
+                    updateLog(QString("CROWD ALERT: %1 people detected in zone '%2' at (%3, %4)").arg(alert.personCount).arg(QString::fromStdString(alert.zoneName)).arg(alert.alertCenter.x).arg(alert.alertCenter.y));
+                    
+                    // 记录到数据库
+                    Database::instance().insertLog(
+                        LOG_CROWD,
+                        QString("人员聚集: %1 人在区域 '%2'").arg(alert.personCount).arg(QString::fromStdString(alert.zoneName)),
+                        "person",
+                        1.0f,
+                        alert.alertCenter.x,
+                        alert.alertCenter.y,
+                        QString::fromStdString(alert.zoneName),
+                        "",
+                        "",
+                        "local"
+                    );
+                }
+                // 报警自动截图/录像
+                onAlarmTriggered(frame);
             }
         }
 
@@ -784,6 +1097,8 @@ void MainWindow::stopRecording()
 {
     if (isRecording) {
         isRecording = false;
+        isAlarmRecording = false; // 同时重置报警录像状态
+        alarmRecordingTimer->stop(); // 停止报警录像定时器
         videoWriter.release();
     }
 }
@@ -863,3 +1178,573 @@ void MainWindow::sendFrameWithResultsToClient(const QString& clientId, const QIm
 {
     tcpServer->sendFrameToClient(clientId, frame, results);
 }
+
+// ==========================================
+// 报警自动截图/录像功能实现
+// ==========================================
+
+void MainWindow::onAlarmTriggered(const cv::Mat& frame)
+{
+    if (frame.empty()) {
+        return;
+    }
+    
+    // 1. 自动截图
+    if (saveCapture(frame)) {
+        updateLog("Alarm: Auto capture saved.");
+    }
+    
+    // 2. 如果还没有在报警录像中，开始报警录像
+    if (!isAlarmRecording && !isRecording) { // 避免与手动录像冲突
+        if (startRecording(frame)) {
+            isAlarmRecording = true;
+            alarmRecordingTimer->start(alarmRecordingDuration * 1000); // 10秒后停止
+            updateLog(QString("Alarm: Auto recording started for %1 seconds.").arg(alarmRecordingDuration));
+        }
+    } else if (isAlarmRecording) {
+        // 如果已经在报警录像中，重置定时器延长录像时间
+        alarmRecordingTimer->start(alarmRecordingDuration * 1000);
+        updateLog("Alarm: Recording duration extended.");
+    }
+}
+
+void MainWindow::onAlarmRecordingTimeout()
+{
+    if (isAlarmRecording) {
+        stopRecording();
+        isAlarmRecording = false;
+        updateLog("Alarm: Auto recording stopped.");
+    }
+}
+
+// ==========================================
+// 历史记录查询 - 日志查看对话框
+// ==========================================
+
+void MainWindow::onBrowseLogsClicked()
+{
+    showLogViewerDialog();
+}
+
+void MainWindow::showLogViewerDialog()
+{
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Alarm Log Viewer");
+    dialog->setMinimumSize(900, 600);
+    
+    QVBoxLayout* mainLayout = new QVBoxLayout(dialog);
+    
+    // 筛选区域
+    QGroupBox* filterGroup = new QGroupBox("Filter", dialog);
+    QVBoxLayout* filterLayout = new QVBoxLayout(filterGroup);
+    
+    QHBoxLayout* filterRow1 = new QHBoxLayout();
+    QLabel* typeLabel = new QLabel("Log Type:");
+    QComboBox* typeComboBox = new QComboBox();
+    typeComboBox->addItem("All", -1);
+    typeComboBox->addItem("Motion", LOG_MOTION);
+    typeComboBox->addItem("Detection", LOG_DETECTION);
+    typeComboBox->addItem("Zone Alert", LOG_ZONE_ALERT);
+    typeComboBox->addItem("Line Alert", LOG_LINE_ALERT);
+    typeComboBox->addItem("Fire", LOG_FIRE);
+    typeComboBox->addItem("Smoke", LOG_SMOKE);
+    typeComboBox->addItem("Crowd", LOG_CROWD);
+    typeComboBox->addItem("Other", LOG_OTHER);
+    
+    QLabel* dateStartLabel = new QLabel("Start:");
+    QDateTimeEdit* startDateTimeEdit = new QDateTimeEdit(QDateTime::currentDateTime().addDays(-7));
+    startDateTimeEdit->setCalendarPopup(true);
+    startDateTimeEdit->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
+    
+    QLabel* dateEndLabel = new QLabel("End:");
+    QDateTimeEdit* endDateTimeEdit = new QDateTimeEdit(QDateTime::currentDateTime());
+    endDateTimeEdit->setCalendarPopup(true);
+    endDateTimeEdit->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
+    
+    QPushButton* refreshBtn = new QPushButton("Refresh");
+    QPushButton* clearBtn = new QPushButton("Clear All Logs");
+    
+    filterRow1->addWidget(typeLabel);
+    filterRow1->addWidget(typeComboBox);
+    filterRow1->addWidget(dateStartLabel);
+    filterRow1->addWidget(startDateTimeEdit);
+    filterRow1->addWidget(dateEndLabel);
+    filterRow1->addWidget(endDateTimeEdit);
+    filterRow1->addWidget(refreshBtn);
+    filterRow1->addWidget(clearBtn);
+    filterRow1->addStretch();
+    
+    filterLayout->addLayout(filterRow1);
+    mainLayout->addWidget(filterGroup);
+    
+    // 日志表格
+    QTableWidget* logTable = new QTableWidget();
+    logTable->setColumnCount(9);
+    logTable->setHorizontalHeaderLabels(QStringList() 
+        << "ID" << "Time" << "Type" << "Description" << "Object" 
+        << "Confidence" << "X" << "Y" << "Zone");
+    logTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    logTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    logTable->horizontalHeader()->setStretchLastSection(true);
+    logTable->setAlternatingRowColors(true);
+    
+    mainLayout->addWidget(logTable);
+    
+    // 详情预览区域
+    QGroupBox* detailGroup = new QGroupBox("Details", dialog);
+    QVBoxLayout* detailLayout = new QVBoxLayout(detailGroup);
+    QLabel* detailLabel = new QLabel("Select a log entry to see details");
+    detailLabel->setWordWrap(true);
+    detailLabel->setStyleSheet("padding: 10px; background-color: #f5f5f5;");
+    detailLayout->addWidget(detailLabel);
+    mainLayout->addWidget(detailGroup);
+    
+    // 关闭按钮
+    QPushButton* closeBtn = new QPushButton("Close");
+    QHBoxLayout* btnLayout = new QHBoxLayout();
+    btnLayout->addStretch();
+    btnLayout->addWidget(closeBtn);
+    mainLayout->addLayout(btnLayout);
+    
+    // 加载日志函数
+    auto loadLogs = [=]() {
+        logTable->setRowCount(0);
+        
+        QVector<LogRecord> logs;
+        int selectedType = typeComboBox->currentData().toInt();
+        
+        if (selectedType == -1) {
+            logs = Database::instance().getLogsByDate(
+                startDateTimeEdit->dateTime(), 
+                endDateTimeEdit->dateTime(), 
+                100
+            );
+        } else {
+            logs = Database::instance().getLogsByType(
+                static_cast<LogType>(selectedType), 
+                100
+            );
+        }
+        
+        for (const LogRecord& log : logs) {
+            int row = logTable->rowCount();
+            logTable->insertRow(row);
+            
+            logTable->setItem(row, 0, new QTableWidgetItem(QString::number(log.id)));
+            logTable->setItem(row, 1, new QTableWidgetItem(log.timestamp.toString("yyyy-MM-dd HH:mm:ss")));
+            logTable->setItem(row, 2, new QTableWidgetItem(log.typeName));
+            logTable->setItem(row, 3, new QTableWidgetItem(log.description));
+            logTable->setItem(row, 4, new QTableWidgetItem(log.objectType));
+            logTable->setItem(row, 5, new QTableWidgetItem(QString::number(log.confidence, 'f', 2)));
+            logTable->setItem(row, 6, new QTableWidgetItem(QString::number(log.x)));
+            logTable->setItem(row, 7, new QTableWidgetItem(QString::number(log.y)));
+            logTable->setItem(row, 8, new QTableWidgetItem(log.zoneName));
+            
+            // 根据日志类型设置颜色
+            QString color;
+            switch (log.type) {
+                case LOG_MOTION: color = "#fff3cd"; break;
+                case LOG_ZONE_ALERT: color = "#f8d7da"; break;
+                case LOG_LINE_ALERT: color = "#cce5ff"; break;
+                case LOG_FIRE: color = "#f5c6cb"; break;
+                case LOG_SMOKE: color = "#e2e3e5"; break;
+                default: color = "#ffffff"; break;
+            }
+            for (int col = 0; col < 9; col++) {
+                logTable->item(row, col)->setBackground(QColor(color));
+            }
+        }
+        
+        logTable->resizeColumnsToContents();
+        logTable->horizontalHeader()->setStretchLastSection(true);
+    };
+    
+    // 连接信号
+    connect(refreshBtn, &QPushButton::clicked, loadLogs);
+    
+    connect(clearBtn, &QPushButton::clicked, this, [=]() {
+        auto reply = QMessageBox::question(
+            dialog, "Clear All Logs", 
+            "Are you sure you want to clear all logs? This cannot be undone.",
+            QMessageBox::Yes | QMessageBox::No
+        );
+        if (reply == QMessageBox::Yes) {
+            Database::instance().clearAllLogs();
+            loadLogs();
+            updateLog("All logs cleared from database");
+        }
+    });
+    
+    connect(closeBtn, &QPushButton::clicked, dialog, &QDialog::accept);
+    
+    connect(logTable, &QTableWidget::itemSelectionChanged, this, [=]() {
+        auto selectedItems = logTable->selectedItems();
+        if (selectedItems.isEmpty()) {
+            detailLabel->setText("Select a log entry to see details");
+            return;
+        }
+        
+        int row = selectedItems.first()->row();
+        QString details = QString(
+            "<b>ID:</b> %1<br>"
+            "<b>Time:</b> %2<br>"
+            "<b>Type:</b> %3<br>"
+            "<b>Description:</b> %4<br>"
+            "<b>Object:</b> %5<br>"
+            "<b>Confidence:</b> %6<br>"
+            "<b>Position:</b> (%7, %8)<br>"
+            "<b>Zone:</b> %9<br>"
+            "<b>Screenshot:</b> %10<br>"
+            "<b>Video:</b> %11<br>"
+            "<b>Camera:</b> %12"
+        ).arg(
+            logTable->item(row, 0)->text(),
+            logTable->item(row, 1)->text(),
+            logTable->item(row, 2)->text(),
+            logTable->item(row, 3)->text(),
+            logTable->item(row, 4)->text(),
+            logTable->item(row, 5)->text(),
+            logTable->item(row, 6)->text(),
+            logTable->item(row, 7)->text(),
+            logTable->item(row, 8)->text(),
+            "(Not saved)",
+            "(Not saved)",
+            "local"
+        );
+        detailLabel->setText(details);
+    });
+    
+    // 初始加载
+    loadLogs();
+    
+    dialog->exec();
+}
+
+// ==========================================
+// 越线检测UI实现
+// ==========================================
+
+void MainWindow::drawTripWiresOnFrame(cv::Mat& frame)
+{
+    std::vector<TripWire> wires = detector->getTripWires();
+    for (const auto& wire : wires) {
+        if (!wire.isEnabled) {
+            continue;
+        }
+
+        // 绘制警戒线
+        cv::line(frame, wire.p1, wire.p2, wire.color, 3);
+
+        // 绘制端点
+        cv::circle(frame, wire.p1, 5, wire.color, -1);
+        cv::circle(frame, wire.p2, 5, wire.color, -1);
+
+        // 绘制方向指示箭头（仅当不是双向时）
+        if (wire.direction != TripWire::Direction::Bidirectional) {
+            cv::Point center = (wire.p1 + wire.p2) / 2;
+            cv::Point arrowTip;
+            cv::Point arrowBase;
+
+            if (wire.direction == TripWire::Direction::LeftToRight || 
+                wire.direction == TripWire::Direction::RightToLeft) {
+                int sign = (wire.direction == TripWire::Direction::LeftToRight) ? 1 : -1;
+                arrowTip = center + cv::Point(sign * 15, 0);
+                arrowBase = center + cv::Point(sign * 5, -10);
+                cv::arrowedLine(frame, arrowBase, arrowTip, wire.color, 2);
+            } else {
+                int sign = (wire.direction == TripWire::Direction::TopToBottom) ? 1 : -1;
+                arrowTip = center + cv::Point(0, sign * 15);
+                arrowBase = center + cv::Point(-10, sign * 5);
+                cv::arrowedLine(frame, arrowBase, arrowTip, wire.color, 2);
+            }
+        }
+
+        // 绘制线名称
+        if (!wire.name.empty()) {
+            cv::Point textPos = (wire.p1 + wire.p2) / 2 + cv::Point(0, -15);
+            cv::putText(frame, wire.name, textPos, cv::FONT_HERSHEY_SIMPLEX, 0.5, wire.color, 1);
+        }
+    }
+}
+
+void MainWindow::drawCrowdZoneOnFrame(cv::Mat& frame)
+{
+    auto crowdZone = detector->getCrowdZone();
+    if (crowdZone.size() >= 3) {
+        // 绘制多边形区域
+        std::vector<std::vector<cv::Point>> contours;
+        contours.push_back(crowdZone);
+        cv::polylines(frame, contours, true, cv::Scalar(0, 255, 255), 2);
+        
+        // 填充半透明颜色
+        cv::Mat overlay = frame.clone();
+        cv::fillPoly(overlay, contours, cv::Scalar(0, 255, 255, 0.3));
+        cv::addWeighted(overlay, 0.2, frame, 0.8, 0, frame);
+        
+        // 绘制区域名称
+        if (crowdZone.size() > 0) {
+            cv::Point textPos = crowdZone[0] + cv::Point(0, -10);
+            cv::putText(frame, "Crowd Zone", textPos, cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
+        }
+    }
+}
+
+void MainWindow::onAddTripWireClicked()
+{
+    // 添加一个默认的警戒线
+    TripWire wire;
+    wire.p1 = cv::Point(100, 240);
+    wire.p2 = cv::Point(540, 240);
+    wire.name = QString("Wire %1").arg(detector->getTripWires().size() + 1).toStdString();
+    wire.isEnabled = true;
+    wire.color = cv::Scalar(0, 0, 255); // 红色
+    wire.direction = TripWire::Direction::Bidirectional; // 默认双向检测
+
+    detector->addTripWire(wire);
+    updateLog(QString("Trip wire '%1' added from (%2, %3) to (%4, %5)")
+        .arg(QString::fromStdString(wire.name))
+        .arg(wire.p1.x)
+        .arg(wire.p1.y)
+        .arg(wire.p2.x)
+        .arg(wire.p2.y));
+}
+
+void MainWindow::onClearTripWiresClicked()
+{
+    detector->clearTripWires();
+    updateLog("All trip wires cleared");
+}
+
+void MainWindow::onAddCrowdZoneClicked()
+{
+    // 添加一个默认的矩形聚集区域
+    std::vector<cv::Point> zone;
+    zone.push_back(cv::Point(100, 100));
+    zone.push_back(cv::Point(540, 100));
+    zone.push_back(cv::Point(540, 380));
+    zone.push_back(cv::Point(100, 380));
+    
+    detector->setCrowdZone(zone);
+    updateLog("Crowd zone added - a rectangle from (100,100) to (540,380)");
+}
+
+void MainWindow::onClearCrowdZoneClicked()
+{
+    detector->clearCrowdZone();
+    updateLog("Crowd zone cleared");
+}
+
+void MainWindow::onSettingsClicked()
+{
+    showSettingsDialog();
+}
+
+void MainWindow::showSettingsDialog()
+{
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Settings");
+    dialog->setMinimumSize(600, 500);
+    
+    QVBoxLayout* mainLayout = new QVBoxLayout(dialog);
+    
+    // Detection Parameters Group
+    QGroupBox* detectionGroup = new QGroupBox("Detection Parameters", dialog);
+    QVBoxLayout* detectionLayout = new QVBoxLayout(detectionGroup);
+    
+    // Confidence Threshold
+    QHBoxLayout* confLayout = new QHBoxLayout();
+    QLabel* confLabel = new QLabel("Confidence Threshold:");
+    QSlider* confSlider = new QSlider(Qt::Horizontal);
+    confSlider->setRange(10, 80);  // 0.10 to 0.80
+    confSlider->setValue(static_cast<int>(detector->getConfidenceThreshold() * 100));
+    QLabel* confValueLabel = new QLabel(QString::number(detector->getConfidenceThreshold(), 'f', 2));
+    confValueLabel->setFixedWidth(60);
+    
+    connect(confSlider, &QSlider::valueChanged, this, [=](int value) {
+        float threshold = value / 100.0f;
+        confValueLabel->setText(QString::number(threshold, 'f', 2));
+    });
+    
+    confLayout->addWidget(confLabel);
+    confLayout->addWidget(confSlider);
+    confLayout->addWidget(confValueLabel);
+    detectionLayout->addLayout(confLayout);
+    
+    // NMS Threshold
+    QHBoxLayout* nmsLayout = new QHBoxLayout();
+    QLabel* nmsLabel = new QLabel("NMS Threshold:");
+    QSlider* nmsSlider = new QSlider(Qt::Horizontal);
+    nmsSlider->setRange(10, 80);  // 0.10 to 0.80
+    nmsSlider->setValue(static_cast<int>(detector->getNMSThreshold() * 100));
+    QLabel* nmsValueLabel = new QLabel(QString::number(detector->getNMSThreshold(), 'f', 2));
+    nmsValueLabel->setFixedWidth(60);
+    
+    connect(nmsSlider, &QSlider::valueChanged, this, [=](int value) {
+        float threshold = value / 100.0f;
+        nmsValueLabel->setText(QString::number(threshold, 'f', 2));
+    });
+    
+    nmsLayout->addWidget(nmsLabel);
+    nmsLayout->addWidget(nmsSlider);
+    nmsLayout->addWidget(nmsValueLabel);
+    detectionLayout->addLayout(nmsLayout);
+    
+    mainLayout->addWidget(detectionGroup);
+    
+    // Motion Detection Group
+    QGroupBox* motionGroup = new QGroupBox("Motion Detection", dialog);
+    QVBoxLayout* motionLayout = new QVBoxLayout(motionGroup);
+    
+    // Motion Sensitivity
+    QHBoxLayout* motionSensLayout = new QHBoxLayout();
+    QLabel* motionSensLabel = new QLabel("Motion Sensitivity:");
+    QSlider* motionSensSlider = new QSlider(Qt::Horizontal);
+    motionSensSlider->setRange(100, 5000);  // 100 to 5000 pixels
+    motionSensSlider->setValue(static_cast<int>(detector->getMotionSensitivity()));
+    QLabel* motionSensValueLabel = new QLabel(QString::number(detector->getMotionSensitivity()));
+    motionSensValueLabel->setFixedWidth(80);
+    
+    connect(motionSensSlider, &QSlider::valueChanged, this, [=](int value) {
+        motionSensValueLabel->setText(QString::number(value));
+    });
+    
+    motionSensLayout->addWidget(motionSensLabel);
+    motionSensLayout->addWidget(motionSensSlider);
+    motionSensLayout->addWidget(motionSensValueLabel);
+    motionLayout->addLayout(motionSensLayout);
+    
+    QLabel* motionDescLabel = new QLabel("Lower value = more sensitive (detects smaller movements)\nHigher value = less sensitive (only detects larger movements)");
+    motionDescLabel->setStyleSheet("color: gray; font-size: 11px;");
+    motionLayout->addWidget(motionDescLabel);
+    
+    mainLayout->addWidget(motionGroup);
+    
+    // Crowd Detection Group
+    QGroupBox* crowdGroup = new QGroupBox("Crowd Detection", dialog);
+    QVBoxLayout* crowdLayout = new QVBoxLayout(crowdGroup);
+    
+    // Crowd Threshold
+    QHBoxLayout* crowdThreshLayout = new QHBoxLayout();
+    QLabel* crowdThreshLabel = new QLabel("Crowd Threshold (people):");
+    QSpinBox* crowdThreshSpin = new QSpinBox();
+    crowdThreshSpin->setRange(2, 20);
+    crowdThreshSpin->setValue(detector->getCrowdThreshold());
+    
+    crowdThreshLayout->addWidget(crowdThreshLabel);
+    crowdThreshLayout->addWidget(crowdThreshSpin);
+    crowdThreshLayout->addStretch();
+    crowdLayout->addLayout(crowdThreshLayout);
+    
+    QLabel* crowdDescLabel = new QLabel("Number of people required to trigger a crowd alert");
+    crowdDescLabel->setStyleSheet("color: gray; font-size: 11px;");
+    crowdLayout->addWidget(crowdDescLabel);
+    
+    mainLayout->addWidget(crowdGroup);
+    
+    // Language Group
+    QGroupBox* langGroup = new QGroupBox("Language", dialog);
+    QVBoxLayout* langLayout = new QVBoxLayout(langGroup);
+    
+    QHBoxLayout* langSelectLayout = new QHBoxLayout();
+    QLabel* langLabel = new QLabel("Select Language:");
+    QComboBox* langComboBox = new QComboBox();
+    langComboBox->addItem("English", "en");
+    langComboBox->addItem("中文", "zh");
+    langComboBox->setCurrentIndex(currentLanguage == "zh" ? 1 : 0);
+    
+    langSelectLayout->addWidget(langLabel);
+    langSelectLayout->addWidget(langComboBox);
+    langSelectLayout->addStretch();
+    langLayout->addLayout(langSelectLayout);
+    
+    QLabel* langDescLabel = new QLabel("Select your preferred language for the interface");
+    langDescLabel->setStyleSheet("color: gray; font-size: 11px;");
+    langLayout->addWidget(langDescLabel);
+    
+    mainLayout->addWidget(langGroup);
+    
+    // Recording Group
+    QGroupBox* recordGroup = new QGroupBox("Recording", dialog);
+    QVBoxLayout* recordLayout = new QVBoxLayout(recordGroup);
+    
+    // Alarm Recording Duration
+    QHBoxLayout* alarmDurationLayout = new QHBoxLayout();
+    QLabel* alarmDurationLabel = new QLabel("Alarm Recording Duration (seconds):");
+    QSpinBox* alarmDurationSpin = new QSpinBox();
+    alarmDurationSpin->setRange(5, 60);
+    alarmDurationSpin->setValue(alarmRecordingDuration);
+    
+    alarmDurationLayout->addWidget(alarmDurationLabel);
+    alarmDurationLayout->addWidget(alarmDurationSpin);
+    alarmDurationLayout->addStretch();
+    recordLayout->addLayout(alarmDurationLayout);
+    
+    mainLayout->addWidget(recordGroup);
+    
+    mainLayout->addStretch();
+    
+    // Buttons
+    QHBoxLayout* btnLayout = new QHBoxLayout();
+    QPushButton* resetBtn = new QPushButton("Reset Defaults");
+    QPushButton* okBtn = new QPushButton("OK");
+    QPushButton* cancelBtn = new QPushButton("Cancel");
+    
+    btnLayout->addWidget(resetBtn);
+    btnLayout->addStretch();
+    btnLayout->addWidget(okBtn);
+    btnLayout->addWidget(cancelBtn);
+    mainLayout->addLayout(btnLayout);
+    
+    // Reset to Defaults
+    connect(resetBtn, &QPushButton::clicked, this, [=]() {
+        confSlider->setValue(10);  // 0.10 default
+        nmsSlider->setValue(45);  // 0.45 default
+        motionSensSlider->setValue(500);  // 500 default
+        crowdThreshSpin->setValue(3);  // 3 people default
+        langComboBox->setCurrentIndex(0);  // English default
+        alarmDurationSpin->setValue(10);  // 10 seconds default
+    });
+    
+    // OK
+    connect(okBtn, &QPushButton::clicked, this, [=]() {
+        // Update Detection Parameters
+        float newConf = confSlider->value() / 100.0f;
+        float newNMS = nmsSlider->value() / 100.0f;
+        detector->setConfidenceThreshold(newConf);
+        detector->setNMSThreshold(newNMS);
+        
+        // Update Motion Detection
+        int newMotionSens = motionSensSlider->value();
+        detector->setMotionSensitivity(newMotionSens);
+        
+        // Update Crowd Detection
+        int newCrowdThresh = crowdThreshSpin->value();
+        detector->setCrowdThreshold(newCrowdThresh);
+        
+        // Update Language
+        QString newLang = langComboBox->currentData().toString();
+        if (newLang != currentLanguage) {
+            currentLanguage = newLang;
+            QMessageBox::information(this, "Language Changed", "Language settings will take effect after restarting the application.");
+        }
+        
+        // Update Recording
+        alarmRecordingDuration = alarmDurationSpin->value();
+        
+        updateLog(QString("Settings updated - Confidence: %1, NMS: %2, MotionSensitivity: %3, CrowdThreshold: %4, AlarmDuration: %5s")
+            .arg(newConf, 0, 'f', 2)
+            .arg(newNMS, 0, 'f', 2)
+            .arg(newMotionSens)
+            .arg(newCrowdThresh)
+            .arg(alarmRecordingDuration));
+        
+        dialog->accept();
+    });
+    
+    // Cancel
+    connect(cancelBtn, &QPushButton::clicked, dialog, &QDialog::accept);
+    
+    dialog->exec();
+}
+
+

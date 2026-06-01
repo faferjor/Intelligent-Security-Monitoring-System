@@ -186,7 +186,6 @@ static constexpr auto qt_meta_stringdata_CLASSMainWindowENDCLASS = QtMocHelpers:
     "MainWindow",
     "onStartServerClicked",
     "",
-    "port",
     "onStopServerClicked",
     "onStartCameraClicked",
     "onStopCameraClicked",
@@ -204,33 +203,50 @@ static constexpr auto qt_meta_stringdata_CLASSMainWindowENDCLASS = QtMocHelpers:
     "std::vector<DetectionResult>",
     "results",
     "cv::Mat",
-    "updateLog"
+    "updateLog",
+    "onMotionDetectionChanged",
+    "state",
+    "onRegionDetectionChanged",
+    "onLineCrossChanged",
+    "onCrowdDetectionChanged",
+    "onSetRegionClicked",
+    "onSetLineClicked",
+    "onSettingsClicked",
+    "onAlarmRecordingTimeout"
 );
 #else  // !QT_MOC_HAS_STRING_DATA
 struct qt_meta_stringdata_CLASSMainWindowENDCLASS_t {
-    uint offsetsAndSizes[44];
+    uint offsetsAndSizes[60];
     char stringdata0[11];
     char stringdata1[21];
     char stringdata2[1];
-    char stringdata3[5];
-    char stringdata4[20];
-    char stringdata5[21];
-    char stringdata6[20];
-    char stringdata7[17];
-    char stringdata8[16];
-    char stringdata9[18];
-    char stringdata10[9];
-    char stringdata11[21];
-    char stringdata12[18];
-    char stringdata13[8];
-    char stringdata14[16];
-    char stringdata15[6];
-    char stringdata16[18];
-    char stringdata17[21];
-    char stringdata18[29];
+    char stringdata3[20];
+    char stringdata4[21];
+    char stringdata5[20];
+    char stringdata6[17];
+    char stringdata7[16];
+    char stringdata8[18];
+    char stringdata9[9];
+    char stringdata10[21];
+    char stringdata11[18];
+    char stringdata12[8];
+    char stringdata13[16];
+    char stringdata14[6];
+    char stringdata15[18];
+    char stringdata16[21];
+    char stringdata17[29];
+    char stringdata18[8];
     char stringdata19[8];
-    char stringdata20[8];
-    char stringdata21[10];
+    char stringdata20[10];
+    char stringdata21[25];
+    char stringdata22[6];
+    char stringdata23[25];
+    char stringdata24[19];
+    char stringdata25[24];
+    char stringdata26[19];
+    char stringdata27[17];
+    char stringdata28[18];
+    char stringdata29[24];
 };
 #define QT_MOC_LITERAL(ofs, len) \
     uint(sizeof(qt_meta_stringdata_CLASSMainWindowENDCLASS_t::offsetsAndSizes) + ofs), len 
@@ -239,30 +255,37 @@ Q_CONSTINIT static const qt_meta_stringdata_CLASSMainWindowENDCLASS_t qt_meta_st
         QT_MOC_LITERAL(0, 10),  // "MainWindow"
         QT_MOC_LITERAL(11, 20),  // "onStartServerClicked"
         QT_MOC_LITERAL(32, 0),  // ""
-        QT_MOC_LITERAL(33, 4),  // "port"
-        QT_MOC_LITERAL(38, 19),  // "onStopServerClicked"
-        QT_MOC_LITERAL(58, 20),  // "onStartCameraClicked"
-        QT_MOC_LITERAL(79, 19),  // "onStopCameraClicked"
-        QT_MOC_LITERAL(99, 16),  // "onCaptureClicked"
-        QT_MOC_LITERAL(116, 15),  // "onRecordClicked"
-        QT_MOC_LITERAL(132, 17),  // "onClientConnected"
-        QT_MOC_LITERAL(150, 8),  // "clientId"
-        QT_MOC_LITERAL(159, 20),  // "onClientDisconnected"
-        QT_MOC_LITERAL(180, 17),  // "onMessageReceived"
-        QT_MOC_LITERAL(198, 7),  // "message"
-        QT_MOC_LITERAL(206, 15),  // "onFrameReceived"
-        QT_MOC_LITERAL(222, 5),  // "frame"
-        QT_MOC_LITERAL(228, 17),  // "updateCameraFrame"
-        QT_MOC_LITERAL(246, 20),  // "onDetectionCompleted"
-        QT_MOC_LITERAL(267, 28),  // "std::vector<DetectionResult>"
-        QT_MOC_LITERAL(296, 7),  // "results"
-        QT_MOC_LITERAL(304, 7),  // "cv::Mat"
-        QT_MOC_LITERAL(312, 9)   // "updateLog"
+        QT_MOC_LITERAL(33, 19),  // "onStopServerClicked"
+        QT_MOC_LITERAL(53, 20),  // "onStartCameraClicked"
+        QT_MOC_LITERAL(74, 19),  // "onStopCameraClicked"
+        QT_MOC_LITERAL(94, 16),  // "onCaptureClicked"
+        QT_MOC_LITERAL(111, 15),  // "onRecordClicked"
+        QT_MOC_LITERAL(127, 17),  // "onClientConnected"
+        QT_MOC_LITERAL(145, 8),  // "clientId"
+        QT_MOC_LITERAL(154, 20),  // "onClientDisconnected"
+        QT_MOC_LITERAL(175, 17),  // "onMessageReceived"
+        QT_MOC_LITERAL(193, 7),  // "message"
+        QT_MOC_LITERAL(201, 15),  // "onFrameReceived"
+        QT_MOC_LITERAL(217, 5),  // "frame"
+        QT_MOC_LITERAL(223, 17),  // "updateCameraFrame"
+        QT_MOC_LITERAL(241, 20),  // "onDetectionCompleted"
+        QT_MOC_LITERAL(262, 28),  // "std::vector<DetectionResult>"
+        QT_MOC_LITERAL(291, 7),  // "results"
+        QT_MOC_LITERAL(299, 7),  // "cv::Mat"
+        QT_MOC_LITERAL(307, 9),  // "updateLog"
+        QT_MOC_LITERAL(317, 24),  // "onMotionDetectionChanged"
+        QT_MOC_LITERAL(342, 5),  // "state"
+        QT_MOC_LITERAL(348, 24),  // "onRegionDetectionChanged"
+        QT_MOC_LITERAL(373, 18),  // "onLineCrossChanged"
+        QT_MOC_LITERAL(392, 23),  // "onCrowdDetectionChanged"
+        QT_MOC_LITERAL(416, 18),  // "onSetRegionClicked"
+        QT_MOC_LITERAL(435, 16),  // "onSetLineClicked"
+        QT_MOC_LITERAL(452, 17),  // "onSettingsClicked"
+        QT_MOC_LITERAL(470, 23)   // "onAlarmRecordingTimeout"
     },
     "MainWindow",
     "onStartServerClicked",
     "",
-    "port",
     "onStopServerClicked",
     "onStartCameraClicked",
     "onStopCameraClicked",
@@ -280,7 +303,16 @@ Q_CONSTINIT static const qt_meta_stringdata_CLASSMainWindowENDCLASS_t qt_meta_st
     "std::vector<DetectionResult>",
     "results",
     "cv::Mat",
-    "updateLog"
+    "updateLog",
+    "onMotionDetectionChanged",
+    "state",
+    "onRegionDetectionChanged",
+    "onLineCrossChanged",
+    "onCrowdDetectionChanged",
+    "onSetRegionClicked",
+    "onSetLineClicked",
+    "onSettingsClicked",
+    "onAlarmRecordingTimeout"
 };
 #undef QT_MOC_LITERAL
 #endif // !QT_MOC_HAS_STRING_DATA
@@ -292,7 +324,7 @@ Q_CONSTINIT static const uint qt_meta_data_CLASSMainWindowENDCLASS[] = {
       11,       // revision
        0,       // classname
        0,    0, // classinfo
-      13,   14, // methods
+      21,   14, // methods
        0,    0, // properties
        0,    0, // enums/sets
        0,    0, // constructors
@@ -300,34 +332,50 @@ Q_CONSTINIT static const uint qt_meta_data_CLASSMainWindowENDCLASS[] = {
        0,       // signalCount
 
  // slots: name, argc, parameters, tag, flags, initial metatype offsets
-       1,    1,   92,    2, 0x08,    1 /* Private */,
-       4,    0,   95,    2, 0x08,    3 /* Private */,
-       5,    0,   96,    2, 0x08,    4 /* Private */,
-       6,    0,   97,    2, 0x08,    5 /* Private */,
-       7,    0,   98,    2, 0x08,    6 /* Private */,
-       8,    0,   99,    2, 0x08,    7 /* Private */,
-       9,    1,  100,    2, 0x08,    8 /* Private */,
-      11,    1,  103,    2, 0x08,   10 /* Private */,
-      12,    2,  106,    2, 0x08,   12 /* Private */,
-      14,    2,  111,    2, 0x08,   15 /* Private */,
-      16,    0,  116,    2, 0x08,   18 /* Private */,
-      17,    2,  117,    2, 0x08,   19 /* Private */,
-      21,    1,  122,    2, 0x08,   22 /* Private */,
+       1,    0,  140,    2, 0x08,    1 /* Private */,
+       3,    0,  141,    2, 0x08,    2 /* Private */,
+       4,    0,  142,    2, 0x08,    3 /* Private */,
+       5,    0,  143,    2, 0x08,    4 /* Private */,
+       6,    0,  144,    2, 0x08,    5 /* Private */,
+       7,    0,  145,    2, 0x08,    6 /* Private */,
+       8,    1,  146,    2, 0x08,    7 /* Private */,
+      10,    1,  149,    2, 0x08,    9 /* Private */,
+      11,    2,  152,    2, 0x08,   11 /* Private */,
+      13,    2,  157,    2, 0x08,   14 /* Private */,
+      15,    0,  162,    2, 0x08,   17 /* Private */,
+      16,    2,  163,    2, 0x08,   18 /* Private */,
+      20,    1,  168,    2, 0x08,   21 /* Private */,
+      21,    1,  171,    2, 0x08,   23 /* Private */,
+      23,    1,  174,    2, 0x08,   25 /* Private */,
+      24,    1,  177,    2, 0x08,   27 /* Private */,
+      25,    1,  180,    2, 0x08,   29 /* Private */,
+      26,    0,  183,    2, 0x08,   31 /* Private */,
+      27,    0,  184,    2, 0x08,   32 /* Private */,
+      28,    0,  185,    2, 0x08,   33 /* Private */,
+      29,    0,  186,    2, 0x08,   34 /* Private */,
 
  // slots: parameters
-    QMetaType::Void, QMetaType::UShort,    3,
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
-    QMetaType::Void, QMetaType::QString,   10,
-    QMetaType::Void, QMetaType::QString,   10,
-    QMetaType::Void, QMetaType::QString, QMetaType::QString,   10,   13,
-    QMetaType::Void, QMetaType::QString, QMetaType::QImage,   10,   15,
     QMetaType::Void,
-    QMetaType::Void, 0x80000000 | 18, 0x80000000 | 20,   19,   15,
-    QMetaType::Void, QMetaType::QString,   13,
+    QMetaType::Void, QMetaType::QString,    9,
+    QMetaType::Void, QMetaType::QString,    9,
+    QMetaType::Void, QMetaType::QString, QMetaType::QString,    9,   12,
+    QMetaType::Void, QMetaType::QString, QMetaType::QImage,    9,   14,
+    QMetaType::Void,
+    QMetaType::Void, 0x80000000 | 17, 0x80000000 | 19,   18,   14,
+    QMetaType::Void, QMetaType::QString,   12,
+    QMetaType::Void, QMetaType::Int,   22,
+    QMetaType::Void, QMetaType::Int,   22,
+    QMetaType::Void, QMetaType::Int,   22,
+    QMetaType::Void, QMetaType::Int,   22,
+    QMetaType::Void,
+    QMetaType::Void,
+    QMetaType::Void,
+    QMetaType::Void,
 
        0        // eod
 };
@@ -343,7 +391,6 @@ Q_CONSTINIT const QMetaObject MainWindow::staticMetaObject = { {
         QtPrivate::TypeAndForceComplete<MainWindow, std::true_type>,
         // method 'onStartServerClicked'
         QtPrivate::TypeAndForceComplete<void, std::false_type>,
-        QtPrivate::TypeAndForceComplete<quint16, std::false_type>,
         // method 'onStopServerClicked'
         QtPrivate::TypeAndForceComplete<void, std::false_type>,
         // method 'onStartCameraClicked'
@@ -376,7 +423,27 @@ Q_CONSTINIT const QMetaObject MainWindow::staticMetaObject = { {
         QtPrivate::TypeAndForceComplete<const cv::Mat &, std::false_type>,
         // method 'updateLog'
         QtPrivate::TypeAndForceComplete<void, std::false_type>,
-        QtPrivate::TypeAndForceComplete<const QString &, std::false_type>
+        QtPrivate::TypeAndForceComplete<const QString &, std::false_type>,
+        // method 'onMotionDetectionChanged'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        QtPrivate::TypeAndForceComplete<int, std::false_type>,
+        // method 'onRegionDetectionChanged'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        QtPrivate::TypeAndForceComplete<int, std::false_type>,
+        // method 'onLineCrossChanged'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        QtPrivate::TypeAndForceComplete<int, std::false_type>,
+        // method 'onCrowdDetectionChanged'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        QtPrivate::TypeAndForceComplete<int, std::false_type>,
+        // method 'onSetRegionClicked'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        // method 'onSetLineClicked'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        // method 'onSettingsClicked'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        // method 'onAlarmRecordingTimeout'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>
     >,
     nullptr
 } };
@@ -387,7 +454,7 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
         auto *_t = static_cast<MainWindow *>(_o);
         (void)_t;
         switch (_id) {
-        case 0: _t->onStartServerClicked((*reinterpret_cast< std::add_pointer_t<quint16>>(_a[1]))); break;
+        case 0: _t->onStartServerClicked(); break;
         case 1: _t->onStopServerClicked(); break;
         case 2: _t->onStartCameraClicked(); break;
         case 3: _t->onStopCameraClicked(); break;
@@ -400,6 +467,14 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
         case 10: _t->updateCameraFrame(); break;
         case 11: _t->onDetectionCompleted((*reinterpret_cast< std::add_pointer_t<std::vector<DetectionResult>>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<cv::Mat>>(_a[2]))); break;
         case 12: _t->updateLog((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
+        case 13: _t->onMotionDetectionChanged((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 14: _t->onRegionDetectionChanged((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 15: _t->onLineCrossChanged((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 16: _t->onCrowdDetectionChanged((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 17: _t->onSetRegionClicked(); break;
+        case 18: _t->onSetLineClicked(); break;
+        case 19: _t->onSettingsClicked(); break;
+        case 20: _t->onAlarmRecordingTimeout(); break;
         default: ;
         }
     }
@@ -424,13 +499,13 @@ int MainWindow::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 13)
+        if (_id < 21)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 13;
+        _id -= 21;
     } else if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 13)
+        if (_id < 21)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 13;
+        _id -= 21;
     }
     return _id;
 }
